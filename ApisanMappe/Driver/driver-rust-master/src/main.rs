@@ -7,75 +7,97 @@ use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 
 fn main() -> std::io::Result<()> {
-    let elev_num_floors = 4;
-    let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
-    println!("Elevator started:\n{:#?}", elevator);
+    let num_floors: u8 = 4;
+    let elevator = Elevator::init("localhost:15657", num_floors)?;
+    println!("Connected to {}", elevator);
 
-    let poll_period = Duration::from_millis(25);
-
-    let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
-    }
-
-    let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
-    }
-
-    let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
-    }
-
-    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
-    }
-
-    let mut dirn = e::DIRN_DOWN;
+    // 1) "Homing": hvis vi ikke er i en etasje, kjør ned til vi treffer en.
     if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
-
-    loop {
-        cbc::select! {
-            recv(call_button_rx) -> a => {
-                let call_button = a.unwrap();
-                println!("{:#?}", call_button);
-                elevator.call_button_light(call_button.floor, call_button.call, true);
-            },
-            recv(floor_sensor_rx) -> a => {
-                let floor = a.unwrap();
-                println!("Floor: {:#?}", floor);
-                dirn =
-                    if floor == 0 {
-                        e::DIRN_UP
-                    } else if floor == elev_num_floors-1 {
-                        e::DIRN_DOWN
-                    } else {
-                        dirn
-                    };
-                elevator.motor_direction(dirn);
-            },
-            recv(stop_button_rx) -> a => {
-                let stop = a.unwrap();
-                println!("Stop button: {:#?}", stop);
-                for f in 0..elev_num_floors {
-                    for c in 0..3 {
-                        elevator.call_button_light(f, c, false);
-                    }
-                }
-            },
-            recv(obstruction_rx) -> a => {
-                let obstr = a.unwrap();
-                println!("Obstruction: {:#?}", obstr);
-                elevator.motor_direction(if obstr { e::DIRN_STOP } else { dirn });
-            },
+        elevator.motor_direction(DIRN_DOWN);
+        loop {
+            if let Some(f) = elevator.floor_sensor() {
+                elevator.motor_direction(DIRN_STOP);
+                elevator.floor_indicator(f);
+                break;
+            }
+            sleep(Duration::from_millis(20));
         }
     }
+
+    let poll_period = Duration::from_millis(50);
+
+    loop {
+        // 2) Vent på en ny bestilling (én av gangen)
+        let (target_floor, target_call) = wait_for_any_button(&elevator, num_floors, poll_period);
+
+        // Skru på lys for knappen vi tok imot
+        elevator.call_button_light(target_floor, target_call, true);
+
+        // 3) Kjør til etasjen
+        go_to_floor(&elevator, target_floor, poll_period);
+
+        // 4) "Serve": stopp + dør 3 sek
+        serve_floor(&elevator, target_floor);
+
+        // 5) Slukk lys og clear
+        elevator.call_button_light(target_floor, target_call, false);
+    }
+}
+
+/// Poller alle knapper og returnerer første (floor, call) som er trykket.
+fn wait_for_any_button(e: &Elevator, num_floors: u8, poll_period: Duration) -> (u8, u8) {
+    loop {
+        for f in 0..num_floors {
+            for c in [HALL_UP, HALL_DOWN, CAB] {
+                // Filtrer bort "ugyldige" hall-knapper i endene (ofte ikke fysisk tilgjengelig)
+                if (f == 0 && c == HALL_DOWN) || (f == num_floors - 1 && c == HALL_UP) {
+                    continue;
+                }
+                if e.call_button(f, c) {
+                    println!("Order received: floor={}, call={}", f, c);
+                    return (f, c);
+                }
+            }
+        }
+        sleep(poll_period);
+    }
+}
+
+/// Kjører motor opp/ned til vi når target_floor.
+fn go_to_floor(e: &Elevator, target_floor: u8, poll_period: Duration) {
+    loop {
+        // Oppdater nåværende etasje (kan være None mellom etasjer)
+        if let Some(cur) = e.floor_sensor() {
+            e.floor_indicator(cur);
+
+            if cur == target_floor {
+                e.motor_direction(DIRN_STOP);
+                println!("Arrived at floor {}", cur);
+                return;
+            }
+
+            // Sett retning mot target
+            let dir = if target_floor > cur { DIRN_UP } else { DIRN_DOWN };
+            e.motor_direction(dir);
+        } else {
+            // Mellom etasjer: bare vent litt (motorretning er allerede satt)
+        }
+
+        sleep(poll_period);
+    }
+}
+
+/// Stopper, åpner dør og holder åpen i ~3 sek.
+fn serve_floor(e: &Elevator, floor: u8) {
+    e.motor_direction(DIRN_STOP);
+    e.floor_indicator(floor);
+
+    e.door_light(true);
+    let open_time = Duration::from_secs(3);
+    let start = Instant::now();
+    while start.elapsed() < open_time {
+        // Hvis du vil: her kan du sjekke obstruction og forlenge tiden
+        sleep(Duration::from_millis(20));
+    }
+    e.door_light(false);
 }
