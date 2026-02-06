@@ -1,6 +1,8 @@
 [package]
-name = "heisprosjekt"
+name = "elevator"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.1.0" }
+crossbeam-channel = "0.5"
