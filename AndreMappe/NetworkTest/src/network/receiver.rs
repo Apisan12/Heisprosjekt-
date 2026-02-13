@@ -16,7 +16,7 @@ pub async fn receiver_task(
         let msg: NetState =
             bincode::deserialize(&buf[..len]).unwrap();
 
-        println!("Fikk: {:?}",msg);
+        // println!("Fikk: {:?}",msg);
         tx_logic.send(LogicMsg::NetUpdate(msg)).await.ok();
     }
 }

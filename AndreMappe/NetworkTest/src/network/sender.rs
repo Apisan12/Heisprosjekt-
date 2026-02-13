@@ -6,7 +6,7 @@ use crate::domain::messages::NetState;
 
 pub async fn sender_task(
     socket: Arc<UdpSocket>,
-    mut rx_snapshot: watch::Receiver<NetState>,
+    rx_snapshot: watch::Receiver<NetState>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(100));
 
@@ -14,7 +14,7 @@ pub async fn sender_task(
         tick.tick().await;
 
         let state = rx_snapshot.borrow().clone();
-        println!("Sente: {:?}",state);
+        // println!("Sente: {:?}",state);
         let bytes = bincode::serialize(&state).unwrap();
 
         socket.send_to(&bytes, "255.255.255.255:30000").await.unwrap();
