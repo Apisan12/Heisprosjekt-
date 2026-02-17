@@ -1,4 +1,1 @@
-mod manager;
-mod policy;
-
-pub use manager::OrderManager;
+pub mod order_manager;

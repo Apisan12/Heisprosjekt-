@@ -11,7 +11,7 @@ pub struct PollReceivers {
     pub obstruction: cbc::Receiver<bool>,
 }
 
-pub fn spawn_pollers(
+pub fn spawn_input_pollers(
     elevator: e::Elevator,
     poll_period: Duration,
 ) -> PollReceivers {
