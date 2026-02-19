@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use crate::messages::{ManagerMsg,FsmEvent};
+use crate::messages::{ManagerMsg,FsmMsg};
 use driver_rust::elevio::elev as e;
 
 pub enum ElevatorState {
@@ -13,7 +13,7 @@ pub enum ElevatorState {
 pub async fn fsm(
     elevator: e::Elevator,
     state: ElevatorState,
-    mut rx: mpsc::Receiver<FsmEvent>,
+    mut rx: mpsc::Receiver<FsmMsg>,
     tx_manager: mpsc::Sender<ManagerMsg>,
 ) {
     
@@ -21,13 +21,13 @@ pub async fn fsm(
     while let Some(msg) = rx.recv().await {
 
         match msg {
-            FsmEvent::AtFloor(floor) => {
+            FsmMsg::AtFloor(floor) => {
                 should_stop();
             }
-            FsmEvent::OrdersUpdated(orders) => {
+            FsmMsg::OrdersUpdated(orders) => {
                 next_stop();
             }
-            FsmEvent::DoorTimeout => {
+            FsmMsg::DoorTimeout => {
                 close_door();
             }
         }

@@ -8,8 +8,8 @@ pub struct PeerState {
     pub behaviour: String,
     pub floor: u8,
     pub direction: String,
-    pub cab_requests: HashSet<Call>,
-    pub hall_calls: HashSet<Call>,
+    pub cab_requests: Vec<bool>,
+    pub hall_calls: Vec<[bool; 2]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -28,7 +28,7 @@ pub struct Call {
 }
 
 #[derive(Debug)]
-pub enum FsmEvent {
+pub enum FsmMsg {
     AtFloor(u8),
     OrdersUpdated(Vec<[bool;3]>),
     DoorTimeout,
