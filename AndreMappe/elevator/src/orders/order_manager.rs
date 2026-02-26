@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
-use crate::messages::{Call, PeerState, LocalState, ManagerMsg};
+use crate::{config::ELEV_NUM_FLOORS, messages::{Call, LocalState, ManagerMsg, PeerState}};
 use driver_rust::elevio::elev::{self as e, CAB};
+use crate::orders::assigner;
 
 // ORDER MANAGER
 // Tar imot beskjeder på rx_manager kanalen.
@@ -29,12 +30,12 @@ use driver_rust::elevio::elev::{self as e, CAB};
 // - Finne ut hvordan JSON inputen til assigner scriptet skal lages
 // - Finne ut hvordan JSON outputen fra assigner blir slik at det kan sendes til FSM
 
-struct WorldView {
-    my_id: u8,
-    hall_calls: HashSet<Call>,
-    my_cab_calls: HashSet<Call>,
-    my_assigned: HashSet<Call>,
-    peers: HashMap<u8, PeerState>,
+pub struct WorldView {
+    pub my_id: u8,
+    pub hall_calls: HashSet<Call>,
+    pub my_cab_calls: HashSet<Call>, // Usikker om denne trengs siden vi har også cab_calls i PeerState
+    pub my_assigned: Vec<[bool; 2]>,
+    pub peers: HashMap<u8, PeerState>,
 }
 
 pub async fn order_manager(
@@ -47,7 +48,7 @@ pub async fn order_manager(
         my_id,
         hall_calls: HashSet::new(),
         my_cab_calls: HashSet::new(),
-        my_assigned: HashSet::new(),
+        my_assigned: vec![[false; 2]; ELEV_NUM_FLOORS as usize],
         peers: HashMap::new(),
     };
 
@@ -60,22 +61,22 @@ pub async fn order_manager(
                     CAB => { world.my_cab_calls.insert(call); }
                     _ => { world.hall_calls.insert(call); }
                 }
-                run_assigner();
+                world.my_assigned = assigner::run_assigner(&world);
                 update_fsm();
             }
             // 2.
             ManagerMsg::NetUpdate(peer) => {
 
-                if peer.id == world.my_id {
-                    continue;
-                }
+                // if peer.id == world.my_id {
+                //     continue;
+                // }
 
-                for call in &peer.hall_calls {
-                    world.hall_calls.insert(call.clone());
-                }
+                // for call in &peer.hall_calls {
+                //     world.hall_calls.insert(call.clone());
+                // }
 
-                world.peers.insert(peer.id,peer);
-                run_assigner();
+                // world.peers.insert(peer.id,peer);
+                // assigner::run_assigner(&world);
                 update_fsm();
 
             }
@@ -109,10 +110,6 @@ fn check_all_have_hall_call(elevator: &e::Elevator, world: &WorldView) {
         }
     }
 
-// Kjøre assigner skriptet som deretter legger til ordren i my_assigned til noden som skal ta ordren
-fn run_assigner() {
-    todo!();
-}
 
 // Sender ordre til FSM, når den får en ny assigned hall call eller en ny cab call
 fn update_fsm() {

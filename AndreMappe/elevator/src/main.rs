@@ -4,17 +4,28 @@ mod driver;
 mod config;
 mod messages;
 mod fsm;
+mod tests;
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
-use messages::{PeerState, ManagerMsg, FsmMsg};
+use messages::{PeerState, ManagerMsg, FsmMsg, Call};
 use orders::order_manager;
+use orders::assigner;
 use network::network::{create_socket, peer_state_receiver, peer_state_sender};
 use driver::pollers::{spawn_input_pollers};
 use driver::bridge::driver_bridge;
 use fsm::fsm as f;
+use config::ELEV_NUM_FLOORS;
 
 use config::ELEV_POLL;
+
+// fn main() {
+//     let world = test_world_realistic();
+//     assigner::run_assigner(&world);
+
+//     let world2 = test_world_stress();
+//     assigner::run_assigner(&world2);
+// }
 
 
 #[tokio::main]
@@ -145,3 +156,4 @@ fn initial_floor(elev: &e::Elevator) -> Option<u8> {
         }
     }
 }
+
