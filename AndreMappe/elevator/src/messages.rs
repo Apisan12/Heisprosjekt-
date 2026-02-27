@@ -1,10 +1,11 @@
 use serde::{Serialize, Deserialize};
 use std::collections::HashSet;
 
+pub type NodeId = [u8; 6]; // MAC-sized identity
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PeerState {
-    pub id: u8,
+    pub id: NodeId,
     pub behaviour: String,
     pub floor: u8,
     pub direction: String,
