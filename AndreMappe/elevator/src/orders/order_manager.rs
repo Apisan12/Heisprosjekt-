@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
-use crate::{config::ELEV_NUM_FLOORS, messages::{NewCall, FsmMsg, LocalState, ManagerMsg, PeerState, NodeId}};
-use driver_rust::elevio::elev::{self as e, CAB};
-use crate::orders::assigner;
+use crate::{config::ELEV_NUM_FLOORS, messages::{FsmMsg, LocalState, ManagerMsg, Call, NodeId, PeerState}, orders::world_view::WorldView};
+use driver_rust::elevio::elev::{self as e, CAB, HALL_DOWN, HALL_UP};
+use crate::orders::{assigner, world_view};
 
 // ORDER MANAGER
 // Tar imot beskjeder på rx_manager kanalen.
@@ -27,26 +27,16 @@ use crate::orders::assigner;
 // TODO:
 // - Lage funksjoner
 // - Finne ut hvordan fjerne ferdige ordre.
-// - Finne ut hvordan JSON inputen til assigner scriptet skal lages
-// - Finne ut hvordan JSON outputen fra assigner blir slik at det kan sendes til FSM
 
-pub struct WorldView {
-    pub hall_calls: HashSet<NewCall>,
-    pub peers: HashMap<NodeId, PeerState>,
-}
 
 pub async fn order_manager(
     my_id: NodeId,
+    initial_peer_state: PeerState,
     mut rx_manager_msg: mpsc::Receiver<ManagerMsg>,
     tx_peer_state: watch::Sender<PeerState>,
     tx_fsm_msg: mpsc::Sender<FsmMsg>,
-
-    elevator: e::Elevator,
 ) {
-    let mut world = WorldView {
-        hall_calls: HashSet::new(),
-        peers: HashMap::new(),
-    };
+    let mut world = WorldView::new();
 
     let mut my_cab_calls = vec![false; ELEV_NUM_FLOORS as usize];
     let mut my_assigned_hall_calls = vec![[false; 2]; ELEV_NUM_FLOORS as usize];
@@ -60,10 +50,10 @@ pub async fn order_manager(
                     CAB => { 
                         my_cab_calls[call.floor as usize] = true;
                     }
-                    _ => { world.hall_calls.insert(call); }
+                    HALL_DOWN | HALL_UP => { 
+                        world.pending_calls.insert(call); 
+                    }
                 }
-
-                update_peers();
 
                 my_assigned_hall_calls = assigner::run_assigner(&world);
 
@@ -88,6 +78,10 @@ pub async fn order_manager(
             // 3.
             ManagerMsg::LocalUpdate(local) => {
                 update_my_peer_state(&mut world, local, &my_id);
+            }
+
+            ManagerMsg::OrderFinished(call) => {
+                todo!()
             }
 
         }
@@ -151,6 +145,6 @@ fn update_my_peer_state(
 }
 
 // Oppdaterer Peers med ny PeerState
-fn update_peers(tx_peer_state: watch::Sender<PeerState>) {
+fn broadcast_peer_state(tx_peer_state: watch::Sender<PeerState>) {
     todo!();
 }

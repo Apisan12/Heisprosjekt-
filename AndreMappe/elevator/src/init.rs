@@ -5,7 +5,7 @@ use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
 use mac_address::get_mac_address;
 
-use crate::messages::{PeerState, ManagerMsg, FsmMsg,NodeId};
+use crate::messages::{PeerState, ManagerMsg, FsmMsg,NodeId, Behaviour, Direction};
 use crate::config::*;
 
 use crate::driver::pollers::spawn_input_pollers;
@@ -46,21 +46,21 @@ pub fn init_elevator(id: u8) -> std::io::Result<e::Elevator> {
 
 /// Create the initial PeerState watch channel.
 /// This also makes sure we have a valid starting floor.
-pub fn init_peerstate_channel(
-    node_id: NodeId,
-    elevator: &e::Elevator,
-) -> (watch::Sender<PeerState>, watch::Receiver<PeerState>) {
-    let floor = initial_floor(elevator).expect("failed to determine initial floor");
+// pub fn init_peerstate_channel(
+//     node_id: NodeId,
+//     elevator: &e::Elevator,
+// ) -> (watch::Sender<PeerState>, watch::Receiver<PeerState>) {
+//     let floor = initial_floor(elevator).expect("failed to determine initial floor");
 
-    watch::channel(PeerState {
-        id: node_id,
-        behaviour: String::from("idle"),
-        floor,
-        direction: String::from("stop"),
-        cab_requests: vec![false; ELEV_NUM_FLOORS as usize],
-        hall_calls: vec![[false, false]; ELEV_NUM_FLOORS as usize],
-    })
-}
+//     watch::channel(PeerState {
+//         id: node_id,
+//         behaviour: Behaviour::Idle,
+//         floor,
+//         direction: Direction::Stop,
+//         cab_requests: vec![false; ELEV_NUM_FLOORS as usize],
+//         hall_calls: vec![[false, false]; ELEV_NUM_FLOORS as usize],
+//     })
+// }
 
 /// Return current floor; if between floors, drive down until a floor is detected.
 pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
@@ -80,8 +80,7 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 
 /// Creates all channels and returns them as a tuple.
 pub fn init_channels(
-    node_id: NodeId,
-    elevator: &e::Elevator,
+    peer_state: PeerState,
 ) -> (
     mpsc::Sender<ManagerMsg>,
     mpsc::Receiver<ManagerMsg>,
@@ -92,7 +91,7 @@ pub fn init_channels(
 ) {
     let (tx_manager, rx_manager) = mpsc::channel::<ManagerMsg>(32);
     let (tx_fsm, rx_fsm) = mpsc::channel::<FsmMsg>(32);
-    let (tx_peerstate, rx_peerstate) = init_peerstate_channel(node_id, elevator);
+    let (tx_peerstate, rx_peerstate) = watch::channel(peer_state);
 
     (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate)
 }
@@ -101,6 +100,7 @@ pub fn init_channels(
 pub fn spawn_tasks(
     id: u8,
     elevator: e::Elevator,
+    initial_peer_state: PeerState,
     socket: std::net::UdpSocket,
     tx_manager: mpsc::Sender<ManagerMsg>,
     rx_manager: mpsc::Receiver<ManagerMsg>,
@@ -126,6 +126,7 @@ pub fn spawn_tasks(
     // ORDER MANAGER
     tokio::spawn(order_manager::order_manager(
         id,
+        initial_peer_state,
         rx_manager,
         tx_peerstate,
         elevator.clone(),

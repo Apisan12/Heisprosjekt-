@@ -1,6 +1,7 @@
 use serde::{Serialize,Deserialize};
 use std::collections::HashMap;
 use std::process::Command;
+use crate::messages::{Behaviour, Direction};
 use crate::orders::order_manager;
 use crate::config::ELEV_NUM_FLOORS;
 
@@ -13,12 +14,11 @@ struct AssignerInput {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AssignerState {
-    behaviour: String,
+    behaviour: Behaviour,
     floor: u8,
-    direction: String,
-
-    #[serde(rename = "cabRequests")]
+    direction: Direction,
     cab_requests: Vec<bool>,
 }
 

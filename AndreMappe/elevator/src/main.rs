@@ -9,7 +9,7 @@ mod init;
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
-use messages::{PeerState, ManagerMsg, FsmMsg, NewCall};
+use messages::{PeerState, ManagerMsg, FsmMsg, Call};
 use orders::order_manager;
 use orders::assigner;
 use network::network::{create_socket, peer_state_receiver, peer_state_sender};
@@ -39,9 +39,16 @@ async fn main() -> std::io::Result<()> {
     let elevator = init::init_elevator(slot_id)?;
     // Kobler til en heis server som bruker ID for å ha forskjellige port
 
+    // Gir heisen en start etasje, kjører ned til nærmeste etasje hvis den står mellom etasjer
+    let floor = init::initial_floor(&elevator).expect("failed to determine initial floor");
+
+    // Lager en initial peer state som brukes som en "mal" til peerstate watch channelen
+    // Brukes også til å initialisere order_manager med denne som sin peer_state.
+    let initial_peer_state = PeerState::new(node_id, floor);
+
 
     // Channels
-    let (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate) = init::init_channels(node_id, &elevator);
+    let (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate) = init::init_channels(initial_peer_state.clone());
 
     // UDP socket
     // Lager UDP socket og tilater broadcast
@@ -52,6 +59,7 @@ async fn main() -> std::io::Result<()> {
     init::spawn_tasks(
         slot_id,
         elevator.clone(),
+        initial_peer_state.clone(),
         socket,
         tx_manager,
         rx_manager,
