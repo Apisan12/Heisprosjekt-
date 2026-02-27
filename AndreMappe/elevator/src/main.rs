@@ -16,6 +16,7 @@ use network::network::{create_socket, peer_state_receiver, peer_state_sender};
 use driver::pollers::{spawn_input_pollers};
 use driver::bridge::driver_bridge;
 use fsm::fsm as f;
+use crate::messages::NodeId;
 
 use crate::config::*;
 // fn main() {
@@ -32,29 +33,15 @@ async fn main() -> std::io::Result<()> {
     // ID
     // Velger id med å kjøre "cargo run --id"
     // eksempel cargo run --1
-    // TODO:
-    // Lage en funskjon som lager ny ID basert på IP eller noe.
-    // Må hvertfall kunne skille mellom de ulike heisene, men i tilegg kunne
-    // initialisere med samme ID hvis det er en heis som har krasjet og startet på ny
-    // slik at den har samme ID for å kunne recovere cab calls.
-    let id: u8 = init::parse_id();
-    // ID
-
+    let slot_id: u8 = init::parse_id();
+    let node_id: NodeId = init::get_mac_node_id();
     // Initialisere en heis
+    let elevator = init::init_elevator(slot_id)?;
     // Kobler til en heis server som bruker ID for å ha forskjellige port
-    // 
-    // TODO:
-    // Finne ut hvordan IP funker når det blir flere heiser
-    // - Vil det være forskjellige IP 
-    // - Hvis det er localhost, må annen måte enn IP brukes til å lage forskjellige ID
-    // Flyttes inn i init?
-    // Lage config for valg av heis etasjer?
 
-    let elevator = init::init_elevator(id)?;
-    // Initialisere en heis
 
     // Channels
-    let (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate) = init::init_channels(id, &elevator);
+    let (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate) = init::init_channels(node_id, &elevator);
 
     // UDP socket
     // Lager UDP socket og tilater broadcast
@@ -63,7 +50,7 @@ async fn main() -> std::io::Result<()> {
     // UDP socket
 
     init::spawn_tasks(
-        id,
+        slot_id,
         elevator.clone(),
         socket,
         tx_manager,
@@ -128,6 +115,6 @@ async fn main() -> std::io::Result<()> {
     // Lage FSM tråd
     // FSM tråd
 
-// Returnerer etasjen heisen står i, hvis den er mellom etasjer kjøres den ned til den når en etasje
-// og returnere denne etasjen.
+    // Returnerer etasjen heisen står i, hvis den er mellom etasjer kjøres den ned til den når en etasje
+    // og returnere denne etasjen.
 

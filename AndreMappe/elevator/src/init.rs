@@ -3,8 +3,9 @@
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
+use mac_address::get_mac_address;
 
-use crate::messages::{PeerState, ManagerMsg, FsmMsg};
+use crate::messages::{PeerState, ManagerMsg, FsmMsg,NodeId};
 use crate::config::*;
 
 use crate::driver::pollers::spawn_input_pollers;
@@ -12,6 +13,15 @@ use crate::driver::bridge::driver_bridge;
 use crate::network::network::{peer_state_receiver, peer_state_sender};
 use crate::orders::order_manager;
 use crate::fsm::fsm as f;
+
+//Finds MAC address
+pub fn get_mac_node_id() -> NodeId {
+    let mac = get_mac_address()
+        .expect("failed to access network interfaces")
+        .expect("no MAC address found");
+
+    mac.bytes()
+}
 
 /// Parse elevator id from CLI args.
 /// Expects: cargo run -- <id>
@@ -37,13 +47,13 @@ pub fn init_elevator(id: u8) -> std::io::Result<e::Elevator> {
 /// Create the initial PeerState watch channel.
 /// This also makes sure we have a valid starting floor.
 pub fn init_peerstate_channel(
-    id: u8,
+    node_id: NodeId,
     elevator: &e::Elevator,
 ) -> (watch::Sender<PeerState>, watch::Receiver<PeerState>) {
     let floor = initial_floor(elevator).expect("failed to determine initial floor");
 
     watch::channel(PeerState {
-        id,
+        id: node_id,
         behaviour: String::from("idle"),
         floor,
         direction: String::from("stop"),
@@ -70,7 +80,7 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 
 /// Creates all channels and returns them as a tuple.
 pub fn init_channels(
-    id: u8,
+    node_id: NodeId,
     elevator: &e::Elevator,
 ) -> (
     mpsc::Sender<ManagerMsg>,
@@ -82,7 +92,7 @@ pub fn init_channels(
 ) {
     let (tx_manager, rx_manager) = mpsc::channel::<ManagerMsg>(32);
     let (tx_fsm, rx_fsm) = mpsc::channel::<FsmMsg>(32);
-    let (tx_peerstate, rx_peerstate) = init_peerstate_channel(id, elevator);
+    let (tx_peerstate, rx_peerstate) = init_peerstate_channel(node_id, elevator);
 
     (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate)
 }
