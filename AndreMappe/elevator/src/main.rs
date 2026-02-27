@@ -9,7 +9,7 @@ mod init;
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
-use messages::{PeerState, ManagerMsg, FsmMsg, Call};
+use messages::{PeerState, ManagerMsg, FsmMsg, NewCall};
 use orders::order_manager;
 use orders::assigner;
 use network::network::{create_socket, peer_state_receiver, peer_state_sender};

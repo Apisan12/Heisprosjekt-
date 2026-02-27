@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
-use crate::{config::ELEV_NUM_FLOORS, messages::{Call, FsmMsg, LocalState, ManagerMsg, PeerState}};
+use crate::{config::ELEV_NUM_FLOORS, messages::{NewCall, FsmMsg, LocalState, ManagerMsg, PeerState, NodeId}};
 use driver_rust::elevio::elev::{self as e, CAB};
 use crate::orders::assigner;
 
@@ -31,12 +31,12 @@ use crate::orders::assigner;
 // - Finne ut hvordan JSON outputen fra assigner blir slik at det kan sendes til FSM
 
 pub struct WorldView {
-    pub hall_calls: HashSet<Call>,
-    pub peers: HashMap<u8, PeerState>,
+    pub hall_calls: HashSet<NewCall>,
+    pub peers: HashMap<NodeId, PeerState>,
 }
 
 pub async fn order_manager(
-    my_id: NodeID,
+    my_id: NodeId,
     mut rx_manager_msg: mpsc::Receiver<ManagerMsg>,
     tx_peer_state: watch::Sender<PeerState>,
     tx_fsm_msg: mpsc::Sender<FsmMsg>,
@@ -87,8 +87,9 @@ pub async fn order_manager(
             }
             // 3.
             ManagerMsg::LocalUpdate(local) => {
-                update_peer_state();
+                update_my_peer_state(&mut world, local, &my_id);
             }
+
         }
         send_peerstate();
         check_all_have_hall_call(&elevator, &world);
@@ -137,8 +138,16 @@ async fn update_fsm(
 
 // Oppdatere PeerState til noden basert på informasjon fra FSM
 // (Behaviour, floor, direction)
-fn update_peer_state() {
-    todo!();
+fn update_my_peer_state(
+    world: &mut WorldView, 
+    my_state: LocalState, 
+    my_id: &NodeId
+) {
+    if let Some(peer) = world.peers.get_mut(my_id) {
+        peer.behaviour = my_state.behaviour;
+        peer.floor = my_state.floor;
+        peer.direction = my_state.direction;
+    }
 }
 
 // Oppdaterer Peers med ny PeerState

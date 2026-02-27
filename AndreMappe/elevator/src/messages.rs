@@ -22,10 +22,17 @@ pub struct LocalState {
 
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Call {
+pub struct NewCall {
     pub id: u8,
     pub floor: u8,
     pub call_type: u8,
+}
+
+
+#[derive(Debug)]
+pub struct FinishedCall {
+    pub floor: u8,
+    pub call_tupe: u8,
 }
 
 #[derive(Debug)]
@@ -37,7 +44,8 @@ pub enum FsmMsg {
 
 #[derive(Debug)]
 pub enum ManagerMsg {
-    NewCall(Call),
+    NewCall(NewCall),
     NetUpdate(PeerState),
     LocalUpdate(LocalState),
+    OrderFinished(FinishedCall)
 }

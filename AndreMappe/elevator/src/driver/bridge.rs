@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 use crossbeam_channel as cbc;
-use crate::messages::{Call, FsmMsg, ManagerMsg};
+use crate::messages::{NewCall, FsmMsg, ManagerMsg};
 use super::pollers::PollReceivers;
 
 // Tar input fra pollers og sender beskjed på Manager kanal og FSM kanal
@@ -16,7 +16,7 @@ pub async fn driver_bridge(
 
                 recv(poll_rx.call_button) -> msg => {
                     if let Ok(btn) = msg {
-                        let call = Call {
+                        let call = NewCall {
                             id: id,
                             floor: btn.floor,
                             call_type: btn.call as u8,
