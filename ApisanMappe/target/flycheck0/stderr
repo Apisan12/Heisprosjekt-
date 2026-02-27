@@ -1,5 +1,5 @@
-   0.047329600s  INFO prepare_target{force=false package_id=ApisanMappe v0.1.0 (C:\TTK4145 Sanntid\Heisprosjekt\Heisprosjekt-\ApisanMappe) target="ApisanMappe"}: cargo::core::compiler::fingerprint: fingerprint error for ApisanMappe v0.1.0 (C:\TTK4145 Sanntid\Heisprosjekt\Heisprosjekt-\ApisanMappe)/Check { test: false }/TargetInner { name: "ApisanMappe", doc: true, ..: with_path("C:\\TTK4145 Sanntid\\Heisprosjekt\\Heisprosjekt-\\ApisanMappe\\src\\main.rs", Edition2024) }
-   0.047424200s  INFO prepare_target{force=false package_id=ApisanMappe v0.1.0 (C:\TTK4145 Sanntid\Heisprosjekt\Heisprosjekt-\ApisanMappe) target="ApisanMappe"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\TTK4145 Sanntid\Heisprosjekt\Heisprosjekt-\ApisanMappe\target\debug\.fingerprint\ApisanMappe-738e899d9dbb27f1\bin-ApisanMappe`
+   0.018084600s  INFO prepare_target{force=false package_id=ApisanMappe v0.1.0 (C:\Users\André\Sanntid\Heisprosjekt-\ApisanMappe) target="ApisanMappe"}: cargo::core::compiler::fingerprint: fingerprint error for ApisanMappe v0.1.0 (C:\Users\André\Sanntid\Heisprosjekt-\ApisanMappe)/Check { test: false }/TargetInner { name: "ApisanMappe", doc: true, ..: with_path("C:\\Users\\André\\Sanntid\\Heisprosjekt-\\ApisanMappe\\src\\main.rs", Edition2024) }
+   0.018155900s  INFO prepare_target{force=false package_id=ApisanMappe v0.1.0 (C:\Users\André\Sanntid\Heisprosjekt-\ApisanMappe) target="ApisanMappe"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\André\Sanntid\Heisprosjekt-\ApisanMappe\target\debug\.fingerprint\ApisanMappe-738e899d9dbb27f1\bin-ApisanMappe`
 
 Caused by:
     The system cannot find the file specified. (os error 2)
@@ -26,4 +26,5 @@ Stack backtrace:
   18: git_midx_writer_dump
   19: BaseThreadInitThunk
   20: RtlUserThreadStart
-    Checking ApisanMappe v0.1.0 (C:\TTK4145 Sanntid\Heisprosjekt\Heisprosjekt-\ApisanMappe)
+    Checking ApisanMappe v0.1.0 (C:\Users\André\Sanntid\Heisprosjekt-\ApisanMappe)
+error: could not compile `ApisanMappe` (bin "ApisanMappe") due to 1 previous error

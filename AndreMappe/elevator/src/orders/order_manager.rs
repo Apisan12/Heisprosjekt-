@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
-use crate::{config::ELEV_NUM_FLOORS, messages::{Call, LocalState, ManagerMsg, PeerState}};
+use crate::{config::ELEV_NUM_FLOORS, messages::{Call, FsmMsg, LocalState, ManagerMsg, PeerState}};
 use driver_rust::elevio::elev::{self as e, CAB};
 use crate::orders::assigner;
 
@@ -31,38 +31,43 @@ use crate::orders::assigner;
 // - Finne ut hvordan JSON outputen fra assigner blir slik at det kan sendes til FSM
 
 pub struct WorldView {
-    pub my_id: u8,
     pub hall_calls: HashSet<Call>,
-    pub my_cab_calls: HashSet<Call>, // Usikker om denne trengs siden vi har også cab_calls i PeerState
-    pub my_assigned: Vec<[bool; 2]>,
     pub peers: HashMap<u8, PeerState>,
 }
 
 pub async fn order_manager(
-    my_id: u8,
-    mut rx: mpsc::Receiver<ManagerMsg>,
-    tx_peerstate: watch::Sender<PeerState>,
+    my_id: NodeID,
+    mut rx_manager_msg: mpsc::Receiver<ManagerMsg>,
+    tx_peer_state: watch::Sender<PeerState>,
+    tx_fsm_msg: mpsc::Sender<FsmMsg>,
+
     elevator: e::Elevator,
 ) {
     let mut world = WorldView {
-        my_id,
         hall_calls: HashSet::new(),
-        my_cab_calls: HashSet::new(),
-        my_assigned: vec![[false; 2]; ELEV_NUM_FLOORS as usize],
         peers: HashMap::new(),
     };
 
-    while let Some(msg) = rx.recv().await {
+    let mut my_cab_calls = vec![false; ELEV_NUM_FLOORS as usize];
+    let mut my_assigned_hall_calls = vec![[false; 2]; ELEV_NUM_FLOORS as usize];
+
+    while let Some(msg) = rx_manager_msg.recv().await {
 
         match msg {
             // 1.
             ManagerMsg::NewCall(call) => {
                 match call.call_type {
-                    CAB => { world.my_cab_calls.insert(call); }
+                    CAB => { 
+                        my_cab_calls[call.floor as usize] = true;
+                    }
                     _ => { world.hall_calls.insert(call); }
                 }
-                world.my_assigned = assigner::run_assigner(&world);
-                update_fsm();
+
+                update_peers();
+
+                my_assigned_hall_calls = assigner::run_assigner(&world);
+
+                update_fsm(tx_fsm_msg.clone(), &my_cab_calls, &my_assigned_hall_calls);
             }
             // 2.
             ManagerMsg::NetUpdate(peer) => {
@@ -77,7 +82,7 @@ pub async fn order_manager(
 
                 // world.peers.insert(peer.id,peer);
                 // assigner::run_assigner(&world);
-                update_fsm();
+                update_fsm(tx_fsm_msg.clone(), &my_cab_calls, &my_assigned_hall_calls);
 
             }
             // 3.
@@ -112,8 +117,22 @@ fn check_all_have_hall_call(elevator: &e::Elevator, world: &WorldView) {
 
 
 // Sender ordre til FSM, når den får en ny assigned hall call eller en ny cab call
-fn update_fsm() {
-    todo!();
+async fn update_fsm(
+    tx_fsm_msg: mpsc::Sender<FsmMsg>, 
+    cab_calls: &Vec<bool>, 
+    hall_calls: &Vec<[bool; 2]>
+) {
+    let mut calls: Vec<[bool; 3]> = Vec::new();
+    
+    for floor in 0..ELEV_NUM_FLOORS as usize {
+        calls.push([
+            hall_calls[floor][0],
+            hall_calls[floor][1],
+            cab_calls[floor],
+        ]);
+    }
+    
+    tx_fsm_msg.send(FsmMsg::OrdersUpdated(calls)).await.ok();
 }
 
 // Oppdatere PeerState til noden basert på informasjon fra FSM
@@ -122,7 +141,7 @@ fn update_peer_state() {
     todo!();
 }
 
-// Sende PeerState til de andre nodene
-fn send_peerstate() {
+// Oppdaterer Peers med ny PeerState
+fn update_peers(tx_peer_state: watch::Sender<PeerState>) {
     todo!();
 }
