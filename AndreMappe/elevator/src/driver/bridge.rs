@@ -1,14 +1,14 @@
 use tokio::sync::mpsc;
 use crossbeam_channel as cbc;
-use crate::messages::{FsmMsg, ManagerMsg, Call, NodeId};
+use crate::messages::{MsgToFsm, MsgToCallManager, Call, NodeId};
 use super::pollers::PollReceivers;
 
 // Tar input fra pollers og sender beskjed på Manager kanal og FSM kanal
 pub async fn driver_bridge(
     id: NodeId,
     poll_rx: PollReceivers,
-    tx_manager: mpsc::Sender<ManagerMsg>,
-    tx_fsm: mpsc::Sender<FsmMsg>,
+    tx_manager: mpsc::Sender<MsgToCallManager>,
+    tx_fsm: mpsc::Sender<MsgToFsm>,
 ) {
     tokio::task::spawn_blocking(move || {
         let mut version = 1;
@@ -24,7 +24,7 @@ pub async fn driver_bridge(
                             floor: btn.floor,
                             call_type: btn.call as u8,
                         };
-                        let _ = tx_manager.blocking_send(ManagerMsg::NewCall(call));
+                        let _ = tx_manager.blocking_send(MsgToCallManager::NewLocalCall(call));
                         println!("New call: {:#?}", call);
                         version += 1;
                     }

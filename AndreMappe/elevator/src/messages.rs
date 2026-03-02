@@ -49,7 +49,7 @@ impl PeerState {
 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct LocalState {
+pub struct ElevState {
     pub behaviour: Behaviour,
     pub floor: u8,
     pub direction: Direction,
@@ -69,16 +69,26 @@ pub struct Call {
 }
 
 #[derive(Debug)]
-pub enum FsmMsg {
+pub enum MsgToFsm {
     AtFloor(u8),
-    OrdersUpdated(Vec<[bool; 3]>),
+    AddCall(Call),
     DoorTimeout,
 }
 
 #[derive(Debug)]
-pub enum ManagerMsg {
-    NewCall(Call),
-    NetUpdate(PeerState),
-    LocalUpdate(LocalState),
-    CallFinished(Call),
+pub enum MsgToCallManager {
+    /// New call from the inputs of the elevator
+    NewLocalCall(Call),
+    /// Sends all the committed hall calls at a set interval
+    /// for redundancy.
+    ActiveHallCalls(HashSet<Call>),
+    /// Sends a 
+    FinishedCall(Call),
+}
+
+#[derive(Debug)]
+pub enum MsgToWorldView {
+    AddHallCall(Call),
+    AddCabCall(Call),
+    NewElevState(ElevState)
 }

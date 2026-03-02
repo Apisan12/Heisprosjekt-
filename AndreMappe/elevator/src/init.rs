@@ -5,7 +5,7 @@ use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
 use mac_address::get_mac_address;
 
-use crate::messages::{PeerState, ManagerMsg, FsmMsg,NodeId, Behaviour, Direction};
+use crate::messages::{PeerState, MsgToCallManager, MsgToFsm,NodeId, Behaviour, Direction};
 use crate::config::*;
 
 use crate::driver::pollers::spawn_input_pollers;
@@ -82,15 +82,15 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 pub fn init_channels(
     peer_state: PeerState,
 ) -> (
-    mpsc::Sender<ManagerMsg>,
-    mpsc::Receiver<ManagerMsg>,
-    mpsc::Sender<FsmMsg>,
-    mpsc::Receiver<FsmMsg>,
+    mpsc::Sender<MsgToCallManager>,
+    mpsc::Receiver<MsgToCallManager>,
+    mpsc::Sender<MsgToFsm>,
+    mpsc::Receiver<MsgToFsm>,
     watch::Sender<PeerState>,
     watch::Receiver<PeerState>,
 ) {
-    let (tx_manager, rx_manager) = mpsc::channel::<ManagerMsg>(32);
-    let (tx_fsm, rx_fsm) = mpsc::channel::<FsmMsg>(32);
+    let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
+    let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
     let (tx_peerstate, rx_peerstate) = watch::channel(peer_state);
 
     (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate)
@@ -102,10 +102,10 @@ pub fn spawn_tasks(
     elevator: e::Elevator,
     initial_peer_state: PeerState,
     socket: std::net::UdpSocket,
-    tx_manager: mpsc::Sender<ManagerMsg>,
-    rx_manager: mpsc::Receiver<ManagerMsg>,
-    tx_fsm: mpsc::Sender<FsmMsg>,
-    rx_fsm: mpsc::Receiver<FsmMsg>,
+    tx_manager: mpsc::Sender<MsgToCallManager>,
+    rx_manager: mpsc::Receiver<MsgToCallManager>,
+    tx_fsm: mpsc::Sender<MsgToFsm>,
+    rx_fsm: mpsc::Receiver<MsgToFsm>,
     tx_peerstate: watch::Sender<PeerState>,
     rx_peerstate: watch::Receiver<PeerState>,
 ) {
@@ -124,7 +124,7 @@ pub fn spawn_tasks(
     tokio::spawn(peer_state_sender(socket, rx_peerstate));
 
     // ORDER MANAGER
-    tokio::spawn(order_manager::order_manager(
+    tokio::spawn(order_manager::call_manager(
         id,
         initial_peer_state,
         rx_manager,

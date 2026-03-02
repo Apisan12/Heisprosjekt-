@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
-use crate::messages::{ManagerMsg, PeerState};
+use crate::messages::{MsgToCallManager, PeerState};
 
 // Lager UDP socket
 // Greier for å kunne åpne flere sockets på samme IP på windows (For å kjøre flere heisprogram på samme IP)
@@ -37,7 +37,7 @@ pub fn create_socket(port: u16) -> Arc<UdpSocket> {
 // Tråd for ta imot PeerState og sende til manager på manager kanalen med NetUpdate beskjed
 pub async fn peer_state_receiver(
     socket: Arc<UdpSocket>,
-    tx_manager: mpsc::Sender<ManagerMsg>,
+    tx_manager: mpsc::Sender<MsgToCallManager>,
 ) {
     let mut buf = [0u8;1024];
 
@@ -48,7 +48,7 @@ pub async fn peer_state_receiver(
             bincode::deserialize(&buf[..len]).unwrap();
 
         // println!("Fikk: {:?}",msg);
-        tx_manager.send(ManagerMsg::NetUpdate(msg)).await.ok();
+        tx_manager.send(MsgToCallManager::NetUpdate(msg)).await.ok();
     }
 }
 

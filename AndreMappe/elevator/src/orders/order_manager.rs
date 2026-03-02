@@ -1,119 +1,76 @@
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
-use crate::{config::ELEV_NUM_FLOORS, messages::{FsmMsg, LocalState, ManagerMsg, Call, NodeId, PeerState}, orders::world_view::WorldView};
-use driver_rust::elevio::elev::{self as e, CAB, HALL_DOWN, HALL_UP};
+use crate::{config::ELEV_NUM_FLOORS, messages::{MsgToFsm, MsgToWorldView, MsgToCallManager, Call, NodeId, PeerState}, orders::world_view::WorldView};
+use driver_rust::elevio::{self, elev::{self as e, CAB, Elevator, HALL_DOWN, HALL_UP}};
 use crate::orders::{assigner, world_view};
 
-// ORDER MANAGER
-// Tar imot beskjeder på rx_manager kanalen.
-// MOTTA
-// 1. NewCall
-// - Når en knapp blir trykket får inn enn beskjed med typen Call, består av ID til heis som fikk trykket,
-//   floor, og call_type 
-// - Legges til i worldview -> kjøre assigner -> oppdatere FSM
-//
-// 2. NetUpdate
-// - Får inn PeerState fra en annen node
-// - Legges til i wordview -> kjøre assinger -> oppdatere FSM
-//
-// 3. LocalUpdate
-// - Får inn LocalState fra FSM, sende fra FSM hver gang den går i ny state.
-// 
-// SENDE
-// Sende PeerState til de andre nodene på tx_peerstate
-// 
-// Sende Orders til FSM på tx_fsm
-//
-// TODO:
-// - Lage funksjoner
-// - Finne ut hvordan fjerne ferdige ordre.
 
-
-pub async fn order_manager(
+pub async fn call_manager(
     my_id: NodeId,
-    initial_peer_state: PeerState,
-    mut rx_manager_msg: mpsc::Receiver<ManagerMsg>,
-    tx_peer_state: watch::Sender<PeerState>,
-    tx_fsm_msg: mpsc::Sender<FsmMsg>,
-) {
-    let mut world = WorldView::new();
-
-    let mut my_cab_calls = vec![false; ELEV_NUM_FLOORS as usize];
-    let mut my_assigned_hall_calls = vec![[false; 2]; ELEV_NUM_FLOORS as usize];
+    // Takes in elevator to handle the lights, maybe make another task to handle outputs?
+    // So we dont need to have elevator in the call_manager scope.
+    elev: Elevator,
+    mut rx_manager_msg: mpsc::Receiver<MsgToCallManager>,
+    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
+    tx_fsm_msg: mpsc::Sender<MsgToFsm>,
+) { 
 
     while let Some(msg) = rx_manager_msg.recv().await {
 
         match msg {
-            // 1.
-            ManagerMsg::NewCall(call) => {
+            MsgToCallManager::NewLocalCall(call) => {
                 match call.call_type {
                     CAB => { 
-                        my_cab_calls[call.floor as usize] = true;
+                        // Add the call to the worldview
+                        let _ = tx_world_view_msg
+                                    .send(MsgToWorldView::AddCabCall(call.clone()))
+                                    .await;
+                        // The cab call does not need to be verified in the worldview
+                        // so it can be added directly to the fsm 
+
+                        // Turns cab light on, maybe move this to a output task
+                        elev.call_button_light(call.floor, call.call_type, true);
+
+                        let _ = tx_fsm_msg
+                                    .send(MsgToFsm::AddCall(call.clone()))
+                                    .await;
                     }
                     HALL_DOWN | HALL_UP => { 
-                        world.pending_calls.insert(call); 
+                        // Add the call to the worldview
+                        // This does not need to be sent to the FSM since it needs to be
+                        let _ = tx_world_view_msg
+                                    .send(MsgToWorldView::AddHallCall(call.clone()))
+                                    .await;
+                    }
+                    // ##TODO: Add some error handling here if the call type is not correct?
+                    other => {
+                        eprintln!("Invalid call_type: {other}");
+                        continue;
                     }
                 }
-
-                my_assigned_hall_calls = assigner::run_assigner(&world);
-
-                update_fsm(tx_fsm_msg.clone(), &my_cab_calls, &my_assigned_hall_calls);
             }
-            // 2.
-            ManagerMsg::NetUpdate(peer) => {
-
-                // if peer.id == world.my_id {
-                //     continue;
-                // }
-
-                // for call in &peer.hall_calls {
-                //     world.hall_calls.insert(call.clone());
-                // }
-
-                // world.peers.insert(peer.id,peer);
-                // assigner::run_assigner(&world);
-                update_fsm(tx_fsm_msg.clone(), &my_cab_calls, &my_assigned_hall_calls);
+            MsgToCallManager::ActiveHallCalls(calls) => {
+                // Turn on lights for the active hallcalls.
+                // Runs the assigner to check if any of the active hall calls is assigned to this node
+                // let assigned_hall_calls = run.assigner()
+                // for calls in assigned_hall_calls
+                //      send(MsgToFsm::AddCall(call.clone())).await;
 
             }
-            // 3.
-            ManagerMsg::LocalUpdate(local) => {
-                update_my_peer_state(&mut world, local, &my_id);
-            }
 
-            ManagerMsg::OrderFinished(call) => {
+
+            MsgToCallManager::FinishedCall(call) => {
                 todo!()
             }
 
         }
-        send_peerstate();
-        check_all_have_hall_call(&elevator, &world);
     }
 }
 
-// Sjekke at alle noder har hall callen før lyset tennes
-fn check_all_have_hall_call(elevator: &e::Elevator, world: &WorldView) {
-        for call in &world.hall_calls {
-            let mut all_have = true;
-
-            // for peer_calls in world.peers.values() {
-            //     if !peer_calls.contains(call) {
-            //         all_have = false;
-            //         break;
-            //     }
-            // }
-
-            if all_have {
-                eprintln!("TENNE LAMPE {:?}", call);
-                elevator.call_button_light(call.floor,call.call_type,true);
-
-            }
-        }
-    }
-
 
 // Sender ordre til FSM, når den får en ny assigned hall call eller en ny cab call
-async fn update_fsm(
-    tx_fsm_msg: mpsc::Sender<FsmMsg>, 
+async fn send_orders_to_fsm(
+    tx_fsm_msg: mpsc::Sender<MsgToFsm>, 
     cab_calls: &Vec<bool>, 
     hall_calls: &Vec<[bool; 2]>
 ) {
@@ -127,7 +84,7 @@ async fn update_fsm(
         ]);
     }
     
-    tx_fsm_msg.send(FsmMsg::OrdersUpdated(calls)).await.ok();
+    tx_fsm_msg.send(MsgToFsm::OrdersUpdated(calls)).await.ok();
 }
 
 // Oppdatere PeerState til noden basert på informasjon fra FSM

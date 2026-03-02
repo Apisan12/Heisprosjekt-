@@ -5,6 +5,9 @@ use crate::messages::{Behaviour, Direction};
 use crate::orders::order_manager;
 use crate::config::ELEV_NUM_FLOORS;
 
+
+// The naming in AssignerInput corresponds to the naming that is expected
+// by the hall_request_assigner.exe script.
 #[derive(Serialize)]
 struct AssignerInput {
     #[serde(rename = "hallRequests")]
@@ -13,6 +16,8 @@ struct AssignerInput {
     states: HashMap<String, AssignerState>,
 }
 
+// The naming in AssignerState corresponds to the naming that is expected
+// for the states in the hall_request_assigner.exe script.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AssignerState {

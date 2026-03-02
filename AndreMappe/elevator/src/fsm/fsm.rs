@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use crate::messages::{ManagerMsg,FsmMsg};
+use crate::messages::{MsgToCallManager,MsgToFsm};
 use driver_rust::elevio::elev as e;
 
 pub enum ElevatorState {
@@ -13,21 +13,21 @@ pub enum ElevatorState {
 pub async fn fsm(
     elevator: e::Elevator,
     state: ElevatorState,
-    mut rx: mpsc::Receiver<FsmMsg>,
-    tx_manager: mpsc::Sender<ManagerMsg>,
+    mut rx: mpsc::Receiver<MsgToFsm>,
+    tx_manager: mpsc::Sender<MsgToCallManager>,
 ) {
     
     // Tar imot events
     while let Some(msg) = rx.recv().await {
 
         match msg {
-            FsmMsg::AtFloor(floor) => {
+            MsgToFsm::AtFloor(floor) => {
                 should_stop();
             }
-            FsmMsg::OrdersUpdated(orders) => {
+            MsgToFsm::OrdersUpdated(orders) => {
                 next_stop();
             }
-            FsmMsg::DoorTimeout => {
+            MsgToFsm::DoorTimeout => {
                 close_door();
             }
         }
