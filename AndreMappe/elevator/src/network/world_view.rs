@@ -2,8 +2,10 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
-use crate::messages::{Call, ElevState, MsgToCallManager, MsgToWorldView, NodeId};
-
+use crate::assigner::AssignerState;
+use crate::{
+    messages::{Call, ElevState, MsgToCallManager, MsgToWorldView, NodeId},
+};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevs: HashMap<NodeId, ElevState>,
@@ -15,6 +17,12 @@ impl WorldView {
             elevs: HashMap::new(),
         }
     }
+
+    /// Creates an iterator for the elevs.
+    pub fn elevs(&self) -> impl Iterator<Item = (&NodeId, &ElevState)> {
+        self.elevs.iter()
+    }
+
     /// Merges the hall calls on the other nodes to this node.
     /// This works as an acknoledgment
     pub fn merge_hall_calls(&mut self, elev_id: NodeId) {
@@ -63,6 +71,17 @@ impl WorldView {
     /// Gets the local elev state read only
     pub fn local_elev(&self, id: &NodeId) -> &ElevState {
         self.elevs.get(id).expect("Local elevator must exist")
+    }
+
+    /// Builds the assigner states to match the input needed for the assigner script
+    pub fn assigner_states(&self) -> HashMap<String, AssignerState> {
+        let mut states = HashMap::new();
+
+        for (id, elev) in self.elevs() {
+            states.insert(format!("id_{id:?}"), AssignerState::from_elev(elev));
+        }
+
+        states
     }
 }
 

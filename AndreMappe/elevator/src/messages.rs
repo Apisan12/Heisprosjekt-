@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use crate::config::ELEV_NUM_FLOORS;
-use crate::orders::world_view::WorldView;
+
+use crate::network::world_view::WorldView;
 
 pub type NodeId = [u8; 6]; // MAC-sized identity
 
