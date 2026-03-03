@@ -5,13 +5,13 @@ use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
 use mac_address::get_mac_address;
 
-use crate::messages::{PeerState, MsgToCallManager, MsgToFsm,NodeId, Behaviour, Direction};
+use crate::messages::{ElevState, MsgToCallManager, MsgToFsm,NodeId, Behaviour, Direction};
 use crate::config::*;
 
 use crate::driver::pollers::spawn_input_pollers;
 use crate::driver::bridge::driver_bridge;
 use crate::network::network::{peer_state_receiver, peer_state_sender};
-use crate::orders::order_manager;
+use crate::orders::call_manager;
 use crate::fsm::fsm as f;
 
 //Finds MAC address
@@ -80,14 +80,14 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 
 /// Creates all channels and returns them as a tuple.
 pub fn init_channels(
-    peer_state: PeerState,
+    peer_state: ElevState,
 ) -> (
     mpsc::Sender<MsgToCallManager>,
     mpsc::Receiver<MsgToCallManager>,
     mpsc::Sender<MsgToFsm>,
     mpsc::Receiver<MsgToFsm>,
-    watch::Sender<PeerState>,
-    watch::Receiver<PeerState>,
+    watch::Sender<ElevState>,
+    watch::Receiver<ElevState>,
 ) {
     let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
     let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
@@ -100,14 +100,14 @@ pub fn init_channels(
 pub fn spawn_tasks(
     id: u8,
     elevator: e::Elevator,
-    initial_peer_state: PeerState,
+    initial_peer_state: ElevState,
     socket: std::net::UdpSocket,
     tx_manager: mpsc::Sender<MsgToCallManager>,
     rx_manager: mpsc::Receiver<MsgToCallManager>,
     tx_fsm: mpsc::Sender<MsgToFsm>,
     rx_fsm: mpsc::Receiver<MsgToFsm>,
-    tx_peerstate: watch::Sender<PeerState>,
-    rx_peerstate: watch::Receiver<PeerState>,
+    tx_peerstate: watch::Sender<ElevState>,
+    rx_peerstate: watch::Receiver<ElevState>,
 ) {
     // INPUT
     let pollers = spawn_input_pollers(elevator.clone(), ELEV_POLL);
@@ -124,7 +124,7 @@ pub fn spawn_tasks(
     tokio::spawn(peer_state_sender(socket, rx_peerstate));
 
     // ORDER MANAGER
-    tokio::spawn(order_manager::call_manager(
+    tokio::spawn(call_manager::call_manager(
         id,
         initial_peer_state,
         rx_manager,

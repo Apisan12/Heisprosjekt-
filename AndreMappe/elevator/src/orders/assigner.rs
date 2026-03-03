@@ -2,7 +2,7 @@ use serde::{Serialize,Deserialize};
 use std::collections::HashMap;
 use std::process::Command;
 use crate::messages::{Behaviour, Direction};
-use crate::orders::order_manager;
+use crate::orders::call_manager;
 use crate::config::ELEV_NUM_FLOORS;
 
 
@@ -27,7 +27,7 @@ struct AssignerState {
     cab_requests: Vec<bool>,
 }
 
-pub fn run_assigner(world: &order_manager::WorldView) -> Vec<[bool; 2]> {
+pub fn run_assigner(world: &call_manager::WorldView) -> Vec<[bool; 2]> {
     let input = build_assigner_input(world);
 
     let json_input = serde_json::to_string(&input).unwrap();
@@ -60,7 +60,7 @@ pub fn run_assigner(world: &order_manager::WorldView) -> Vec<[bool; 2]> {
 }
 
 // Lager input-JSON filen som brukes i assigner scriptet.
-fn build_assigner_input(world: &order_manager::WorldView) -> AssignerInput {
+fn build_assigner_input(world: &call_manager::WorldView) -> AssignerInput {
     let hall_requests = hall_calls_to_matrix(world);
 
     let mut states = HashMap::new();
@@ -81,7 +81,7 @@ fn build_assigner_input(world: &order_manager::WorldView) -> AssignerInput {
 }
 
 // Lager Hall Call matrisen som sendes til assigner skriptet
-fn hall_calls_to_matrix(world: &order_manager::WorldView) -> Vec<[bool; 2]> {
+fn hall_calls_to_matrix(world: &call_manager::WorldView) -> Vec<[bool; 2]> {
     let mut matrix = vec![[false; 2]; ELEV_NUM_FLOORS as usize];
 
     for call in &world.hall_calls {

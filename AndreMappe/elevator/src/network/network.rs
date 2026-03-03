@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
-use crate::messages::{MsgToCallManager, PeerState};
+use crate::messages::{ElevState, MsgToWorldView};
 
 // Lager UDP socket
 // Greier for å kunne åpne flere sockets på samme IP på windows (For å kjøre flere heisprogram på samme IP)
@@ -34,38 +34,39 @@ pub fn create_socket(port: u16) -> Arc<UdpSocket> {
     Arc::new(tokio_socket)
 }
 
-// Tråd for ta imot PeerState og sende til manager på manager kanalen med NetUpdate beskjed
-pub async fn peer_state_receiver(
+pub async fn network_manager(
     socket: Arc<UdpSocket>,
-    tx_manager: mpsc::Sender<MsgToCallManager>,
-) {
-    let mut buf = [0u8;1024];
-
-    loop {
-        let (len, _) = socket.recv_from(&mut buf).await.unwrap();
-
-        let msg: PeerState =
-            bincode::deserialize(&buf[..len]).unwrap();
-
-        // println!("Fikk: {:?}",msg);
-        tx_manager.send(MsgToCallManager::NetUpdate(msg)).await.ok();
-    }
-}
-
-//Tråd for å sende PeerState til de andre nodene
-pub async fn peer_state_sender(
-    socket: Arc<UdpSocket>,
-    rx_peerstate: watch::Receiver<PeerState>,
+    mut rx_network: watch::Receiver<ElevState>,
+    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(100));
+    let mut buf = [0u8; 4096];
+
+    let mut local_elev_state = rx_network.borrow().clone();
 
     loop {
-        tick.tick().await;
+        tokio::select! {
 
-        let state = rx_peerstate.borrow().clone();
-        // println!("Sente: {:?}",state);
-        let bytes = bincode::serialize(&state).unwrap();
+            Ok(_) = rx_network.changed() => {
+                local_elev_state = rx_network.borrow().clone();
+            }
 
-        socket.send_to(&bytes, "255.255.255.255:30000").await.unwrap();
+            _ = tick.tick() => {
+                let bytes = bincode::serialize(&local_elev_state).unwrap();
+                let _ = socket
+                            .send_to(&bytes, "255.255.255.255:30000")
+                            .await;
+            }
+
+            Ok((len, _)) = socket.recv_from(&mut buf) => {
+                if let Ok(remote_elev_state) =
+                    bincode::deserialize::<ElevState>(&buf[..len])
+                {
+                    let _ = tx_world_view_msg
+                                .send(MsgToWorldView::NewRemoteElevState(remote_elev_state))
+                                .await;
+                }
+            }
+        }
     }
 }

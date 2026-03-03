@@ -9,10 +9,10 @@ mod init;
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
-use messages::{PeerState, MsgToCallManager, MsgToFsm, Call};
-use orders::order_manager;
+use messages::{ElevState, MsgToCallManager, MsgToFsm, Call};
+use orders::call_manager;
 use orders::assigner;
-use network::network::{create_socket, peer_state_receiver, peer_state_sender};
+use network::network::{create_socket};
 use driver::pollers::{spawn_input_pollers};
 use driver::bridge::driver_bridge;
 use fsm::fsm as f;
@@ -44,7 +44,7 @@ async fn main() -> std::io::Result<()> {
 
     // Lager en initial peer state som brukes som en "mal" til peerstate watch channelen
     // Brukes også til å initialisere order_manager med denne som sin peer_state.
-    let initial_peer_state = PeerState::new(node_id, floor);
+    let initial_peer_state = ElevState::new(node_id, floor);
 
 
     // Channels
@@ -74,55 +74,3 @@ async fn main() -> std::io::Result<()> {
     // Loop for å holde main igang
 
 }
-
-
-    // MANAGER KANAL
-    // Lager manager kanal for å sende ManagerMsg.
-    // Sender fra: 
-    // - Heis input
-    // - Andre noder i nettverket
-    // - FSM
-    // Mottar til:
-    // - Order Manager
-    // MANAGER KANAL
-
-    // FSM kanal
-    // TODO:
-    // Lage FSM kanal som sender beskjeder til FSM
-    // FSM kanal
-
-    // Worldview kanal
-    // Sender PeerState til alle noder, PeerState blir motat av order manager og lagt i worldview.
-    // TODO:
-    // Må ha en initial PeerState når kanalen opprettes, dette burde lages i init og ha en funskjon
-    // som leser hvor heisen er osv når den blir startet.
-    // Hvis heisen er mellom etasjer når den starter må den først gå til et floor
-    // og deretter få en initial PeerState.
-    // Worldview kanal
-
-    // INPUT TRÅD
-    // Lager tråd som tar imot input fra heis
-    // Polles med det som var gitt i driver modulen, bruker en bridge til å gjøre det om til 
-    // meldigner på tokio kanalene
-    // TODO:
-    // Legge til FSM kanalen når den er oprettet
-    // INPUT TRÅD
-
-    // Nettverk tråder
-    // Lager tråd for å mota PeerState fra andre noder og sende til order_manager
-    // Lager tråd for å sende PeerState til andre noder.
-    // Nettverk tråder
-
-    // Order Manager tråd
-    // TODO:
-    // Legge til for å sende på FSM kanal når den er lagd
-    // Order Manager tråd
-
-    // FSM tråd
-    // TODO:
-    // Lage FSM tråd
-    // FSM tråd
-
-    // Returnerer etasjen heisen står i, hvis den er mellom etasjer kjøres den ned til den når en etasje
-    // og returnere denne etasjen.
-
