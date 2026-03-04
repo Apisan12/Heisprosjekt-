@@ -1,0 +1,84 @@
+use std::{thread, time::Duration};
+use tokio::sync::mpsc;
+
+use driver_rust::elevio::elev::Elevator;
+
+use crate::messages::{Call, CallId, MsgToCallManager, MsgToFsm, NodeId};
+
+/// Spawns the hardware polling thread.
+///
+/// Responsibilities:
+/// - Poll call buttons -> Sends to call_manager
+/// - Poll floor sensor -> Sends to elevator_manager
+/// - Poll stop button -> Sends to elevator_manager
+/// - Poll obstruction switch -> Sends to elevator_manager
+pub fn spawn_input_thread(
+elev_id: NodeId,
+elevator: Elevator,
+tx_manager_msg: mpsc::Sender<MsgToCallManager>,
+tx_fsm_msg: mpsc::Sender<MsgToFsm>,
+period: Duration,
+) {
+thread::spawn(move || {
+// Previous state tracking
+let mut prev_buttons = vec![[false; 3]; elevator.num_floors as usize];
+let mut prev_floor: Option<u8> = None;
+// let mut prev_stop = false;
+// let mut prev_obstruction = false;
+let mut seq = 1;
+
+    loop {
+        // --- Call buttons ---
+        for floor in 0..elevator.num_floors {
+            for call in 0..3 {
+                let pressed = elevator.call_button(floor, call);
+
+                if pressed && prev_buttons[floor as usize][call as usize] != pressed {
+                    let call_id = CallId{
+                        elev_id: elev_id,
+                        seq: seq,
+                    };
+                    seq += 1;
+                    let call = Call {
+                        id: call_id,
+                        floor: floor,
+                        call_type: call,
+                    };
+                    let _ = tx_manager_msg.send(MsgToCallManager::NewLocalCall(call));
+                }
+
+                prev_buttons[floor as usize][call as usize] = pressed;
+            }
+        }
+
+        // --- Floor sensor ---
+        let floor = elevator.floor_sensor();
+
+        if floor != prev_floor {
+            if let Some(f) = floor {
+                let _ = tx_fsm_msg.send(MsgToFsm::AtFloor(f));
+            }
+            prev_floor = floor;
+        }
+
+        // --- Stop button ---
+        // let stop = elevator.stop_button();
+
+        // if stop != prev_stop {
+        //     let _ = tx.send(DriverEvent::StopButton(stop));
+        //     prev_stop = stop;
+        // }
+
+        // --- Obstruction ---
+        // let obstruction = elevator.obstruction();
+
+        // if obstruction != prev_obstruction {
+        //     let _ = tx.send(DriverEvent::Obstruction(obstruction));
+        //     prev_obstruction = obstruction;
+        // }
+
+        thread::sleep(period);
+    }
+});
+
+}
