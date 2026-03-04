@@ -1,5 +1,5 @@
 //Lage unik ID for alle calls
-//Fikse sletting av ordre*
+//Fikse sletting av ordre**
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
