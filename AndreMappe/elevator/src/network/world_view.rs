@@ -4,22 +4,22 @@ use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
 use crate::{
-    messages::{Call, ElevState, MsgToCallManager, MsgToWorldView, NodeId},
+    messages::{Call, ElevStatus, MsgToCallManager, MsgToWorldView, NodeId},
 };
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
-    elevs: HashMap<NodeId, ElevState>,
+    elevs: HashMap<NodeId, ElevStatus>,
 }
 
 impl WorldView {
-    pub fn new() -> Self {
-        Self {
-            elevs: HashMap::new(),
-        }
+    pub fn new(initial_status: ElevStatus) -> Self {
+        let mut elevs = HashMap::new();
+        elevs.insert(initial_status.id, initial_status);
+        Self { elevs }
     }
 
     /// Creates an iterator for the elevs.
-    pub fn elevs(&self) -> impl Iterator<Item = (&NodeId, &ElevState)> {
+    pub fn elevs(&self) -> impl Iterator<Item = (&NodeId, &ElevStatus)> {
         self.elevs.iter()
     }
 
@@ -64,12 +64,12 @@ impl WorldView {
     }
 
     /// Gets the mutable local elev state
-    pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevState {
+    pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevStatus {
         self.elevs.get_mut(id).expect("Local elevator must exist")
     }
 
     /// Gets the local elev state read only
-    pub fn local_elev(&self, id: &NodeId) -> &ElevState {
+    pub fn local_elev(&self, id: &NodeId) -> &ElevStatus {
         self.elevs.get(id).expect("Local elevator must exist")
     }
 
@@ -87,11 +87,12 @@ impl WorldView {
 
 pub async fn world_manager(
     elev_id: NodeId,
+    initial_elev_status: ElevStatus,
     mut rx_world_view_msg: mpsc::Receiver<MsgToWorldView>,
     tx_manager_msg: mpsc::Sender<MsgToCallManager>,
-    tx_network: watch::Sender<ElevState>,
+    tx_network: watch::Sender<ElevStatus>,
 ) {
-    let mut world = WorldView::new();
+    let mut world = WorldView::new(initial_elev_status);
 
     while let Some(msg) = rx_world_view_msg.recv().await {
         match msg {

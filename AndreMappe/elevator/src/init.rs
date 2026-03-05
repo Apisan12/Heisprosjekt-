@@ -2,17 +2,19 @@
 //Fikse sletting av ordre*
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
-use tokio::sync::{mpsc, watch};
 use mac_address::get_mac_address;
+use tokio::sync::{mpsc, watch};
 
-use crate::messages::{ElevState, MsgToCallManager, MsgToFsm,NodeId, Behaviour, Direction};
 use crate::config::*;
+use crate::messages::{
+    ElevStatus, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId,
+};
 
-use crate::driver::pollers::spawn_input_pollers;
-use crate::driver::bridge::driver_bridge;
-use crate::network::network::{peer_state_receiver, peer_state_sender};
-use crate::orders::call_manager;
+use crate::driver::input;
 use crate::fsm::fsm as f;
+use crate::network::network::network_manager;
+use crate::network::world_view;
+use crate::orders::call_manager;
 
 //Finds MAC address
 pub fn get_mac_node_id() -> NodeId {
@@ -25,17 +27,19 @@ pub fn get_mac_node_id() -> NodeId {
 
 /// Parse elevator id from CLI args.
 /// Expects: cargo run -- <id>
-pub fn parse_id() -> u8 {
-    std::env::args()
+pub fn parse_id() -> NodeId {
+    let n: u8 = std::env::args()
         .nth(1)
         .expect("missing id")
         .parse()
-        .expect("id must be number")
+        .expect("id must be number");
+
+    [0, 0, 0, 0, 0, n]
 }
 
 /// Initialize elevator driver connection and return the Elevator handle.
-pub fn init_elevator(id: u8) -> std::io::Result<e::Elevator> {
-    let port = BASE_ELEVATOR_PORT + id as u32;
+pub fn init_elevator(id: NodeId) -> std::io::Result<e::Elevator> {
+    let port = BASE_ELEVATOR_PORT + id[5] as u32;
     let addr = format!("localhost:{}", port);
 
     let elevator = e::Elevator::init(&addr, ELEV_NUM_FLOORS)?;
@@ -43,24 +47,6 @@ pub fn init_elevator(id: u8) -> std::io::Result<e::Elevator> {
 
     Ok(elevator)
 }
-
-/// Create the initial PeerState watch channel.
-/// This also makes sure we have a valid starting floor.
-// pub fn init_peerstate_channel(
-//     node_id: NodeId,
-//     elevator: &e::Elevator,
-// ) -> (watch::Sender<PeerState>, watch::Receiver<PeerState>) {
-//     let floor = initial_floor(elevator).expect("failed to determine initial floor");
-
-//     watch::channel(PeerState {
-//         id: node_id,
-//         behaviour: Behaviour::Idle,
-//         floor,
-//         direction: Direction::Stop,
-//         cab_requests: vec![false; ELEV_NUM_FLOORS as usize],
-//         hall_calls: vec![[false, false]; ELEV_NUM_FLOORS as usize],
-//     })
-// }
 
 /// Return current floor; if between floors, drive down until a floor is detected.
 pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
@@ -80,63 +66,90 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 
 /// Creates all channels and returns them as a tuple.
 pub fn init_channels(
-    peer_state: ElevState,
+    initial_elev_status: ElevStatus,
 ) -> (
     mpsc::Sender<MsgToCallManager>,
     mpsc::Receiver<MsgToCallManager>,
     mpsc::Sender<MsgToFsm>,
     mpsc::Receiver<MsgToFsm>,
-    watch::Sender<ElevState>,
-    watch::Receiver<ElevState>,
+    mpsc::Sender<MsgToWorldView>,
+    mpsc::Receiver<MsgToWorldView>,
+    watch::Sender<ElevStatus>,
+    watch::Receiver<ElevStatus>,
 ) {
-    let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
-    let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
-    let (tx_peerstate, rx_peerstate) = watch::channel(peer_state);
+    let (tx_manager_msg, rx_manager_msg) = mpsc::channel::<MsgToCallManager>(32);
+    let (tx_fsm_msg, rx_fsm_msg) = mpsc::channel::<MsgToFsm>(32);
+    let (tx_world_view_msg, rx_world_view_msg) = mpsc::channel::<MsgToWorldView>(32);
+    let (tx_network, rx_network) = watch::channel(initial_elev_status);
 
-    (tx_manager, rx_manager, tx_fsm, rx_fsm, tx_peerstate, rx_peerstate)
+    (
+        tx_manager_msg,
+        rx_manager_msg,
+        tx_fsm_msg,
+        rx_fsm_msg,
+        tx_world_view_msg,
+        rx_world_view_msg,
+        tx_network,
+        rx_network,
+    )
 }
 
 /// Spawns all tasks.
 pub fn spawn_tasks(
-    id: u8,
+    elev_id: NodeId,
     elevator: e::Elevator,
-    initial_peer_state: ElevState,
-    socket: std::net::UdpSocket,
-    tx_manager: mpsc::Sender<MsgToCallManager>,
-    rx_manager: mpsc::Receiver<MsgToCallManager>,
-    tx_fsm: mpsc::Sender<MsgToFsm>,
-    rx_fsm: mpsc::Receiver<MsgToFsm>,
-    tx_peerstate: watch::Sender<ElevState>,
-    rx_peerstate: watch::Receiver<ElevState>,
+    initial_elev_status: ElevStatus,
+    floor: u8,
+    tx_manager_msg: mpsc::Sender<MsgToCallManager>,
+    rx_manager_msg: mpsc::Receiver<MsgToCallManager>,
+    tx_fsm_msg: mpsc::Sender<MsgToFsm>,
+    rx_fsm_msg: mpsc::Receiver<MsgToFsm>,
+    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
+    rx_world_view_msg: mpsc::Receiver<MsgToWorldView>,
+    tx_network: watch::Sender<ElevStatus>,
+    rx_network: watch::Receiver<ElevStatus>,
 ) {
     // INPUT
-    let pollers = spawn_input_pollers(elevator.clone(), ELEV_POLL);
-    tokio::spawn(driver_bridge(
-        id,
-        pollers,
-        tx_manager.clone(),
-        tx_fsm.clone(),
-    ));
+    input::spawn_input_thread(
+        elev_id,
+        elevator.clone(),
+        tx_manager_msg.clone(),
+        tx_fsm_msg.clone(),
+        ELEV_POLL,
+    );
 
     // NETWORK (UdpSocket isn't Clone, so use try_clone for the second task)
-    let socket_rx = socket.try_clone().expect("socket try_clone failed");
-    tokio::spawn(peer_state_receiver(socket_rx, tx_manager.clone()));
-    tokio::spawn(peer_state_sender(socket, rx_peerstate));
+    tokio::spawn(network_manager(
+        rx_network.clone(),
+        tx_world_view_msg.clone(),
+    ));
 
     // ORDER MANAGER
     tokio::spawn(call_manager::call_manager(
-        id,
-        initial_peer_state,
-        rx_manager,
-        tx_peerstate,
+        elev_id,
         elevator.clone(),
+        rx_manager_msg,
+        tx_world_view_msg.clone(),
+        tx_fsm_msg.clone(),
+    ));
+
+    // WORLD MANAGER
+    tokio::spawn(world_view::world_manager(
+        elev_id,
+        initial_elev_status,
+        rx_world_view_msg,
+        tx_manager_msg.clone(),
+        tx_network.clone(),
     ));
 
     // FSM
     tokio::spawn(f::fsm(
-        elevator,
+        elevator.clone(),
         f::ElevatorState::Idle,
-        rx_fsm,
-        tx_manager,
+        floor,
+        rx_fsm_msg,
+        tx_manager_msg.clone(),
+        tx_fsm_msg.clone(),
+        tx_world_view_msg.clone(),
     ));
 }

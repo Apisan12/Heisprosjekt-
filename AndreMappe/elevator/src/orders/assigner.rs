@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use crate::messages::{Behaviour, Call, Direction, ElevState, NodeId};
+use crate::messages::{Behaviour, Call, Direction, ElevStatus, NodeId};
 use crate::network::world_view::WorldView;
 use crate::config::ELEV_NUM_FLOORS;
 
@@ -31,7 +31,7 @@ pub struct AssignerState {
 
 impl AssignerState {
 
-    pub fn from_elev(elev: &ElevState) -> Self {
+    pub fn from_elev(elev: &ElevStatus) -> Self {
         let mut cab_requests = vec![false; ELEV_NUM_FLOORS as usize];
         for call in &elev.cab_calls {
             if call.floor < ELEV_NUM_FLOORS {
