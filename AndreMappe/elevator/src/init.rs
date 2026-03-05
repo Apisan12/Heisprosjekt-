@@ -4,6 +4,7 @@
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use mac_address::get_mac_address;
 use tokio::sync::{mpsc, watch};
+use tokio::time::{sleep, Duration};
 
 use crate::config::*;
 use crate::messages::{
@@ -15,6 +16,39 @@ use crate::fsm::fsm as f;
 use crate::network::network::network_manager;
 use crate::network::world_view;
 use crate::orders::call_manager;
+
+pub struct Channels {
+    pub tx_manager: mpsc::Sender<MsgToCallManager>,
+    pub rx_manager: mpsc::Receiver<MsgToCallManager>,
+    pub tx_fsm: mpsc::Sender<MsgToFsm>,
+    pub rx_fsm: mpsc::Receiver<MsgToFsm>,
+    pub tx_world: mpsc::Sender<MsgToWorldView>,
+    pub rx_world: mpsc::Receiver<MsgToWorldView>,
+    pub tx_net: watch::Sender<ElevStatus>,
+    pub rx_net: watch::Receiver<ElevStatus>,
+}
+
+impl Channels {
+    pub fn new(initial_status: ElevStatus) -> Self {
+        let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
+        let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
+        let (tx_world, rx_world) = mpsc::channel::<MsgToWorldView>(32);
+        let (tx_net, rx_net) = watch::channel(initial_status);
+
+        Self {
+            tx_manager,
+            rx_manager,
+            tx_fsm,
+            rx_fsm,
+            tx_world,
+            rx_world,
+            tx_net,
+            rx_net,
+        }
+    }
+}
+
+
 
 //Finds MAC address
 pub fn get_mac_node_id() -> NodeId {
@@ -49,7 +83,7 @@ pub fn init_elevator(id: NodeId) -> std::io::Result<e::Elevator> {
 }
 
 /// Return current floor; if between floors, drive down until a floor is detected.
-pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
+pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
     if let Some(floor) = elev.floor_sensor() {
         return Some(floor);
     }
@@ -61,54 +95,29 @@ pub fn initial_floor(elev: &e::Elevator) -> Option<u8> {
             elev.motor_direction(DIRN_STOP);
             return Some(floor);
         }
+        sleep(Duration::from_millis(10)).await;
     }
 }
 
-/// Creates all channels and returns them as a tuple.
-pub fn init_channels(
-    initial_elev_status: ElevStatus,
-) -> (
-    mpsc::Sender<MsgToCallManager>,
-    mpsc::Receiver<MsgToCallManager>,
-    mpsc::Sender<MsgToFsm>,
-    mpsc::Receiver<MsgToFsm>,
-    mpsc::Sender<MsgToWorldView>,
-    mpsc::Receiver<MsgToWorldView>,
-    watch::Sender<ElevStatus>,
-    watch::Receiver<ElevStatus>,
-) {
-    let (tx_manager_msg, rx_manager_msg) = mpsc::channel::<MsgToCallManager>(32);
-    let (tx_fsm_msg, rx_fsm_msg) = mpsc::channel::<MsgToFsm>(32);
-    let (tx_world_view_msg, rx_world_view_msg) = mpsc::channel::<MsgToWorldView>(32);
-    let (tx_network, rx_network) = watch::channel(initial_elev_status);
 
-    (
-        tx_manager_msg,
-        rx_manager_msg,
-        tx_fsm_msg,
-        rx_fsm_msg,
-        tx_world_view_msg,
-        rx_world_view_msg,
-        tx_network,
-        rx_network,
-    )
-}
-
-/// Spawns all tasks.
 pub fn spawn_tasks(
     elev_id: NodeId,
     elevator: e::Elevator,
     initial_elev_status: ElevStatus,
     floor: u8,
-    tx_manager_msg: mpsc::Sender<MsgToCallManager>,
-    rx_manager_msg: mpsc::Receiver<MsgToCallManager>,
-    tx_fsm_msg: mpsc::Sender<MsgToFsm>,
-    rx_fsm_msg: mpsc::Receiver<MsgToFsm>,
-    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
-    rx_world_view_msg: mpsc::Receiver<MsgToWorldView>,
-    tx_network: watch::Sender<ElevStatus>,
-    rx_network: watch::Receiver<ElevStatus>,
+    channels: Channels,
 ) {
+    let Channels {
+        tx_manager: tx_manager_msg,
+        rx_manager: rx_manager_msg,
+        tx_fsm: tx_fsm_msg,
+        rx_fsm: rx_fsm_msg,
+        tx_world: tx_world_view_msg,
+        rx_world: rx_world_view_msg,
+        tx_net: tx_network,
+        rx_net: rx_network,
+    } = channels;
+
     // INPUT
     input::spawn_input_thread(
         elev_id,
@@ -118,7 +127,7 @@ pub fn spawn_tasks(
         ELEV_POLL,
     );
 
-    // NETWORK (UdpSocket isn't Clone, so use try_clone for the second task)
+    // NETWORK
     tokio::spawn(network_manager(
         rx_network.clone(),
         tx_world_view_msg.clone(),
@@ -153,3 +162,5 @@ pub fn spawn_tasks(
         tx_world_view_msg.clone(),
     ));
 }
+
+
