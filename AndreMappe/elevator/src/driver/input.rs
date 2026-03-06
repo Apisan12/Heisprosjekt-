@@ -3,19 +3,19 @@ use tokio::sync::mpsc;
 
 use driver_rust::elevio::elev::Elevator;
 
-use crate::messages::{Call, CallId, MsgToCallManager, MsgToFsm, NodeId};
+use crate::messages::{Call, CallId, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId};
 
 /// Spawns the hardware polling thread.
 ///
 /// Responsibilities:
-/// - Poll call buttons -> Sends to call_manager
+/// - Poll call buttons -> Sends to world_manager
 /// - Poll floor sensor -> Sends to elevator_manager
 /// - Poll stop button -> Sends to elevator_manager
 /// - Poll obstruction switch -> Sends to elevator_manager
 pub fn spawn_input_thread(
 elev_id: NodeId,
 elevator: Elevator,
-tx_manager_msg: mpsc::Sender<MsgToCallManager>,
+tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
 tx_fsm_msg: mpsc::Sender<MsgToFsm>,
 period: Duration,
 ) {
@@ -44,7 +44,7 @@ let mut seq = 1;
                         floor: floor,
                         call_type: call,
                     };
-                    let _ = tx_manager_msg.send(MsgToCallManager::NewLocalCall(call));
+                    let _ = tx_world_view_msg.send(MsgToWorldView::AddCall(call));
                 }
 
                 prev_buttons[floor as usize][call as usize] = pressed;

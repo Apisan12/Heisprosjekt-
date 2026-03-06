@@ -22,11 +22,10 @@ pub async fn call_manager(
 
     while let Some(msg) = rx_manager_msg.recv().await {
         match msg {
-
             MsgToCallManager::NewWorldView(world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
 
-                let active_cab_calls = world.active_cab_calls();
+                let active_cab_calls = world.active_cab_calls(&elev_id);
                 for call in active_cab_calls {
                     driver.call_button_light(call.floor, call.call_type, true);
                     all_active_calls.insert(call);
