@@ -1,4 +1,4 @@
-use driver_rust::elevio::elev::{CAB, HALL_DOWN, HALL_UP};
+use driver_rust::elevio::elev::{self, CAB, HALL_DOWN, HALL_UP};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
@@ -58,7 +58,7 @@ impl WorldView {
         }
     }
 
-    /// checks the worldview for calls that are know on all connected nodes these are active
+    /// Checks the worldview for calls that are know on all connected elevators, these are active
     /// returns these active calls
     pub fn active_hall_calls(&self) -> HashSet<Call> {
         let mut finished = HashSet::new();
@@ -82,9 +82,30 @@ impl WorldView {
         active
     }
 
-    pub fn active_cab_calls(&self) -> HashSet<Call> {
-        todo!();
+    /// Checks the worldview for calls that are known by other elevators since this means they are backed up
+    /// If the elevator is alone on the network, it sets the cab call as active since it cant be backed up
+    pub fn active_cab_calls(&self, elev_id: NodeId) -> HashSet<Call> {
+        let mut active = HashSet::new();
+
+        if let Some(elevator) = self.elevs.get(&elev_id) {
+                active.extend(elevator.cab_calls.iter().copied());
+            }
+
+        // Checks if the elevator is alone in the worldview
+        if self.elevs.keys().all(|id| *id == elev_id) {
+            return active
+        } 
+
+        active.retain(|call| {
+            self.elevs
+                .iter()
+                .filter(|(id,_)| **id != elev_id)
+                .all(|(_, other)| other.known_cab_calls.contains(call))
+        });
+        
+        active
     }
+
     /// Gets the mutable local elev state
     pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
         self.elevs.get_mut(id).expect("Local elevator must exist")
