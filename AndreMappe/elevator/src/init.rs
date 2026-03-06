@@ -60,19 +60,69 @@ pub fn get_mac_node_id() -> NodeId {
 
 /// Parse elevator id from CLI args.
 /// Expects: cargo run -- <id>
-pub fn parse_id() -> NodeId {
-    let n: u8 = std::env::args()
+pub fn parse_id() -> u8 {
+    std::env::args()
         .nth(1)
-        .expect("missing id")
-        .parse()
-        .expect("id must be number");
-
-    [0, 0, 0, 0, 0, n]
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
 }
 
+pub struct BootContext {
+    pub node_id: NodeId,
+    pub elevator: e::Elevator,
+    pub floor: u8,
+    pub initial_status: ElevatorStatus,
+    pub channels: Channels,
+}
+
+pub async fn boot() -> std::io::Result<BootContext> {
+
+    // Simulator slot (only used for port selection) when runnning several instances local
+    let slot = parse_id();
+
+    // Real elevator identity (MAC address)
+    let node_id = get_mac_node_id();
+
+    println!("Node ID (MAC): {:?}", node_id);
+
+    // Connect to elevator driver
+    let elevator = init_elevator(slot)?;
+
+    // Find initial floor
+    let floor = initial_floor(&elevator)
+        .await
+        .expect("failed to determine initial floor");
+
+    println!("Initial floor: {}", floor);
+
+    // Recover cab calls from network broadcasts
+    let recovered_cab_calls =
+        network::recover_startup_state(node_id).await;
+
+    println!("Recovered cab calls: {:?}", recovered_cab_calls);
+
+    // Create initial elevator status
+    let mut initial_status = ElevatorStatus::new(node_id, floor);
+
+    initial_status.cab_calls = recovered_cab_calls.clone();
+    initial_status.known_cab_calls = recovered_cab_calls;
+
+    // Create communication channels
+    let channels = Channels::new(initial_status.clone());
+
+    Ok(BootContext {
+        node_id,
+        elevator,
+        floor,
+        initial_status,
+        channels,
+    })
+}
+
+
 /// Initialize elevator driver connection and return the Elevator handle.
-pub fn init_elevator(id: NodeId) -> std::io::Result<e::Elevator> {
-    let port = BASE_ELEVATOR_PORT + id[5] as u32;
+pub fn init_elevator(slot: u8) -> std::io::Result<e::Elevator> {
+    let port = BASE_ELEVATOR_PORT + slot as u32;
     let addr = format!("localhost:{}", port);
 
     let elevator = e::Elevator::init(&addr, ELEV_NUM_FLOORS)?;

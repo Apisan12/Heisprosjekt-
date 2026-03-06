@@ -10,6 +10,8 @@ use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
+
+
 // Lager UDP socket
 // Greier for å kunne åpne flere sockets på samme IP på windows (For å kjøre flere heisprogram på samme IP)
 pub fn create_socket(port: u16) -> Arc<UdpSocket> {
