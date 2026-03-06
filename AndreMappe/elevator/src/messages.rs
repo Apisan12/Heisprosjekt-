@@ -96,23 +96,19 @@ impl fmt::Display for Call {
 
 #[derive(Debug)]
 pub enum MsgToFsm {
+    /// Recievs a message when the elevator reaches a new floor
     AtFloor(u8),
-    AddCall(Call),
+    /// Revieves a message with the active calls every time there is a change
+    ActiveCalls(HashSet<Call>),
     DoorTimeout,
 }
 
 #[derive(Debug)]
 pub enum MsgToCallManager {
-    /// New call from the inputs of the elevator
-    NewLocalCall(Call),
-    /// Sends all the committed hall calls at a set interval
-    /// for redundancy from the worldview.
+    /// Recieves the WorldView everytime there is a change
     NewWorldView(WorldView),
-    /// Sends the finished call from the FSM.
+    /// Recieves a message when the elevator has finished a call
     FinishedCall(Call),
-    /// If the node had unfinished cab calls, they are restored
-    /// on initilization with this message.
-    _RestoreCabCalls(HashSet<Call>),
 }
 
 #[derive(Debug)]

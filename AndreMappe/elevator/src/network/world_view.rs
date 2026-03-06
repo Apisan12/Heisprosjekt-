@@ -60,7 +60,7 @@ impl WorldView {
 
     /// checks the worldview for calls that are know on all connected nodes these are active
     /// returns these active calls
-    pub fn active_calls(&self) -> HashSet<Call> {
+    pub fn active_hall_calls(&self) -> HashSet<Call> {
         let mut finished = HashSet::new();
 
         for elev in self.elevs.values() {
@@ -82,6 +82,9 @@ impl WorldView {
         active
     }
 
+    pub fn active_cab_calls(&self) -> HashSet<Call> {
+        todo!();
+    }
     /// Gets the mutable local elev state
     pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
         self.elevs.get_mut(id).expect("Local elevator must exist")
