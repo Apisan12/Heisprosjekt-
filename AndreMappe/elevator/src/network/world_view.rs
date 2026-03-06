@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
+use crate::elevator;
 use crate::messages::{Call, ElevatorStatus, MsgToCallManager, MsgToWorldView, NodeId};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
@@ -25,7 +26,9 @@ impl WorldView {
 
     /// Gets the mutable local elev state
     pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
-        self.elevators.get_mut(id).expect("Local elevator must exist")
+        self.elevators
+            .get_mut(id)
+            .expect("Local elevator must exist")
     }
 
     /// Gets the local elev state read only
@@ -44,16 +47,17 @@ impl WorldView {
             all_finished_calls.extend(elev.finished_hall_calls.iter().copied());
         }
 
-        if let Some(elev) = self.elevators.get_mut(elev_id) {
+        if let Some(elevator) = self.elevators.get_mut(elev_id) {
             for call in all_hall_calls {
-                elev.hall_calls.insert(call);
+                if !all_finished_calls.contains(&call) {
+                    elevator.hall_calls.insert(call);
+                }
             }
             for call in all_finished_calls {
-                elev.finished_hall_calls.insert(call);
+                elevator.finished_hall_calls.insert(call);
             }
         }
     }
-
 
     /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
     pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
@@ -95,25 +99,27 @@ impl WorldView {
     /// Checks the worldview for calls that are known by other elevators since this means they are backed up
     /// If the elevator is alone on the network, it sets the cab call as active since it cant be backed up
     pub fn active_cab_calls(&self, elev_id: &NodeId) -> HashSet<Call> {
-        let elevator = self.elevators.get(elev_id).expect("Elevator not in worldview");
+        let elevator = self
+            .elevators
+            .get(elev_id)
+            .expect("Elevator not in worldview");
         let mut active: HashSet<Call> = elevator.cab_calls.iter().copied().collect();
 
         // If the elevator is alone in the worldview
         if self.elevators.keys().all(|id| id == elev_id) {
-            return active
-        } 
+            return active;
+        }
 
         // Only keep cab calls known by other elevators as active
         active.retain(|call| {
             self.elevators
                 .iter()
-                .filter(|(id,_)| *id != elev_id)
+                .filter(|(id, _)| *id != elev_id)
                 .all(|(_, other)| other.known_cab_calls.contains(call))
         });
-        
+
         active
     }
-
 
     /// Builds the assigner states to match the input needed for the assigner script
     pub fn assigner_states(&self) -> HashMap<String, AssignerState> {
@@ -126,6 +132,9 @@ impl WorldView {
         states
     }
 
+    /// Removes hall calls when they are seen as finished on every elevator
+    /// Remvoes from finished when the call is not in hall calls on any of the elevators
+    /// This is a two step propagation to ensure safe removing of hall calls
     pub fn cleanup_hall_calls(&mut self) {
         let Some(elevator) = self.elevators.values().next() else {
             return;
@@ -142,9 +151,20 @@ impl WorldView {
             }
         }
 
+        let removable: HashSet<Call> = finished_by_all
+            .into_iter()
+            .filter(|call| {
+                self.elevators
+                    .values()
+                    .all(|elevator| !elevator.hall_calls.contains(call))
+            })
+            .collect();
 
-
-
+        for elevator in self.elevators.values_mut() {
+            for call in &removable {
+                elevator.finished_hall_calls.remove(call);
+            }
+        }
     }
 }
 
@@ -198,6 +218,7 @@ pub async fn world_manager(
                 // Add the updated elevator state to the world
                 world.elevators.insert(remote_elev.elev_id, remote_elev);
                 world.merge_hall_calls(&elev_id);
+                world.cleanup_hall_calls();
                 world.acknowledge_cab_calls(&elev_id);
 
                 // Sends the new world view to call manager
