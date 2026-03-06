@@ -117,10 +117,8 @@ pub enum MsgToCallManager {
 
 #[derive(Debug)]
 pub enum MsgToWorldView {
-    AddHallCall(Call),
-    AddFinishedHallCall(Call),
-    AddCabCall(Call),
-    RemoveCabCall(Call),
+    AddCall(Call),
+    FinishedCall(Call),
     UpdateLocalElevStatus(LocalElevatorStatus),
     NewRemoteElevState(ElevatorStatus),
     RemoveDisconnectedElevator(NodeId),

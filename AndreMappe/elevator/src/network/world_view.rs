@@ -1,3 +1,4 @@
+use driver_rust::elevio::elev::{CAB, HALL_DOWN, HALL_UP};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
@@ -8,7 +9,6 @@ use crate::messages::{Call, ElevatorStatus, MsgToCallManager, MsgToWorldView, No
 pub struct WorldView {
     elevs: HashMap<NodeId, ElevatorStatus>,
 }
-
 
 impl WorldView {
     pub fn new(initial_status: ElevatorStatus) -> Self {
@@ -41,6 +41,20 @@ impl WorldView {
             for call in all_finished_calls {
                 elev.finished_hall_calls.insert(call);
             }
+        }
+    }
+
+
+    /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
+    pub fn acknowledge_cab_calls(&mut self, elev_id: NodeId) {
+        let mut all_cab_calls = HashSet::new();
+
+        for elevator in self.elevs.values() {
+            all_cab_calls.extend(elevator.cab_calls.iter().copied());
+        }
+
+        if let Some(elevator) = self.elevs.get_mut(&elev_id) {
+            elevator.known_cab_calls = all_cab_calls;
         }
     }
 
@@ -101,29 +115,31 @@ pub async fn world_manager(
 
     while let Some(msg) = rx_world_view_msg.recv().await {
         match msg {
-            MsgToWorldView::AddCabCall(cab_call) => {
-                let elev = world.local_elev_mut(&elev_id);
-                elev.cab_calls.insert(cab_call);
-
-                let _ = tx_network.send(elev.clone());
+            MsgToWorldView::AddCall(call) => {
+                let elevator = world.local_elev_mut(&elev_id);
+                match call.call_type {
+                    CAB => {
+                        elevator.cab_calls.insert(call);
+                        elevator.known_cab_calls.insert(call);
+                    }
+                    HALL_DOWN | HALL_UP => {
+                        elevator.hall_calls.insert(call);
+                    }
+                }
+                let _ = tx_network.send(elevator.clone());
             }
-            MsgToWorldView::RemoveCabCall(cab_call) => {
-                let elev = world.local_elev_mut(&elev_id);
-                elev.cab_calls.remove(&cab_call);
+            MsgToWorldView::FinishedCall(call) => {
+                let elevator = world.local_elev_mut(&elev_id);
+                match call.call_type {
+                    CAB => {
+                        elevator.cab_calls.remove(&call);
+                    }
+                    HALL_DOWN | HALL_UP => {
+                        elevator.finished_hall_calls.insert(call);
+                    }
+                }
 
-                let _ = tx_network.send(elev.clone());
-            }
-            MsgToWorldView::AddHallCall(hall_call) => {
-                let elev = world.local_elev_mut(&elev_id);
-                elev.hall_calls.insert(hall_call);
-
-                let _ = tx_network.send(elev.clone());
-            }
-            MsgToWorldView::AddFinishedHallCall(hall_call) => {
-                let elev = world.local_elev_mut(&elev_id);
-                elev.finished_hall_calls.insert(hall_call);
-
-                let _ = tx_network.send(elev.clone());
+                let _ = tx_network.send(elevator.clone());
             }
             MsgToWorldView::UpdateLocalElevStatus(local_elev) => {
                 // update behaviour, floor, direction in worldview for this elevators id
@@ -138,6 +154,7 @@ pub async fn world_manager(
                 // Add the updated elevator state to the world
                 world.elevs.insert(remote_elev.elev_id, remote_elev);
                 world.merge_hall_calls(elev_id);
+                world.acknowledge_cab_calls(elev_id);
 
                 // Sends the new world view to call manager
                 let _ = tx_manager_msg
@@ -148,10 +165,6 @@ pub async fn world_manager(
                 let _ = tx_network.send(elev.clone());
             }
             MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
-                if let Some(disconnected_elevator) = world.elevs.get(&remote_elev_id) {
-                    world.disconnected_elevators.insert(remote_elev_id,disconnected_elevator);
-                }
-
                 world.elevs.remove(&remote_elev_id);
 
                 let _ = tx_manager_msg
