@@ -1,6 +1,6 @@
 use crate::{
     orders::assigner,
-    messages::{Call, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId},
+    messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId},
 };
 use driver_rust::elevio::{
     elev::{Elevator, CAB, HALL_DOWN, HALL_UP},
@@ -14,7 +14,7 @@ pub async fn call_manager(
     driver: Elevator,
     mut rx_manager_msg: mpsc::Receiver<MsgToCallManager>,
     tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
-    tx_fsm_msg: mpsc::Sender<MsgToFsm>,
+    tx_fsm_msg: mpsc::Sender<MsgToElevatorManager>,
 ) {
     // Used to store previous active hall calls to determine what lights
     // to turn on or off in the NewWorldView message.
@@ -48,23 +48,23 @@ pub async fn call_manager(
                 }
 
                 let _ = tx_fsm_msg
-                    .send(MsgToFsm::ActiveCalls(all_active_calls))
+                    .send(MsgToElevatorManager::ActiveCalls(all_active_calls))
                     .await;
             }
 
-            MsgToCallManager::FinishedCall(call) => {
+            MsgToCallManager::ServedCall(call) => {
                 // Turn of light for respective call
                 // Add to finished calls
                 match call.call_type {
                     CAB => {
                         driver.call_button_light(call.floor, call.call_type, false);
                         let _ = tx_world_view_msg
-                            .send(MsgToWorldView::FinishedCall(call.clone()))
+                            .send(MsgToWorldView::ServedCall(call.clone()))
                             .await;
                     }
                     HALL_DOWN | HALL_UP => {
                         let _ = tx_world_view_msg
-                            .send(MsgToWorldView::FinishedCall(call.clone()))
+                            .send(MsgToWorldView::ServedCall(call.clone()))
                             .await;
                     }
                     other => {

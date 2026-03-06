@@ -95,7 +95,7 @@ impl fmt::Display for Call {
 }
 
 #[derive(Debug)]
-pub enum MsgToFsm {
+pub enum MsgToElevatorManager {
     /// Recievs a message when the elevator reaches a new floor
     AtFloor(u8),
     /// Revieves a message with the active calls every time there is a change
@@ -108,13 +108,13 @@ pub enum MsgToCallManager {
     /// Recieves the WorldView everytime there is a change
     NewWorldView(WorldView),
     /// Recieves a message when the elevator has finished a call
-    FinishedCall(Call),
+    ServedCall(Call),
 }
 
 #[derive(Debug)]
 pub enum MsgToWorldView {
     AddCall(Call),
-    FinishedCall(Call),
+    ServedCall(Call),
     UpdateLocalElevStatus(LocalElevatorStatus),
     NewRemoteElevState(ElevatorStatus),
     RemoveDisconnectedElevator(NodeId),

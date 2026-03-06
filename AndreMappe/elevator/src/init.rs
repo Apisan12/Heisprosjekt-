@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::config::*;
 use crate::messages::{
-    ElevatorStatus, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId,
+    ElevatorStatus, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId,
 };
 
 use crate::driver::input;
@@ -19,8 +19,8 @@ use crate::orders::call_manager;
 pub struct Channels {
     pub tx_manager: mpsc::Sender<MsgToCallManager>,
     pub rx_manager: mpsc::Receiver<MsgToCallManager>,
-    pub tx_fsm: mpsc::Sender<MsgToFsm>,
-    pub rx_fsm: mpsc::Receiver<MsgToFsm>,
+    pub tx_fsm: mpsc::Sender<MsgToElevatorManager>,
+    pub rx_fsm: mpsc::Receiver<MsgToElevatorManager>,
     pub tx_world: mpsc::Sender<MsgToWorldView>,
     pub rx_world: mpsc::Receiver<MsgToWorldView>,
     pub tx_net: watch::Sender<ElevatorStatus>,
@@ -30,7 +30,7 @@ pub struct Channels {
 impl Channels {
     pub fn new(initial_status: ElevatorStatus) -> Self {
         let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
-        let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
+        let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToElevatorManager>(32);
         let (tx_world, rx_world) = mpsc::channel::<MsgToWorldView>(32);
         let (tx_net, rx_net) = watch::channel(initial_status);
 

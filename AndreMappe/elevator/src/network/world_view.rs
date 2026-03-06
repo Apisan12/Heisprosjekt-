@@ -192,7 +192,7 @@ pub async fn world_manager(
                 }
                 let _ = tx_network.send(elevator.clone());
             }
-            MsgToWorldView::FinishedCall(call) => {
+            MsgToWorldView::ServedCall(call) => {
                 let elevator = world.local_elev_mut(&elev_id);
                 match call.call_type {
                     CAB => {

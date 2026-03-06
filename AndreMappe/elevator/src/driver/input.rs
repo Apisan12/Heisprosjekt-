@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use driver_rust::elevio::elev::Elevator;
 
-use crate::messages::{Call, CallId, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId};
+use crate::messages::{Call, CallId, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId};
 
 /// Spawns the hardware polling thread.
 ///
@@ -16,7 +16,7 @@ pub fn spawn_input_thread(
 elev_id: NodeId,
 elevator: Elevator,
 tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
-tx_fsm_msg: mpsc::Sender<MsgToFsm>,
+tx_fsm_msg: mpsc::Sender<MsgToElevatorManager>,
 period: Duration,
 ) {
 thread::spawn(move || {
@@ -56,7 +56,7 @@ let mut seq: u64 = 0;
 
         if floor != prev_floor {
             if let Some(f) = floor {
-                let _ = tx_fsm_msg.send(MsgToFsm::AtFloor(f));
+                let _ = tx_fsm_msg.send(MsgToElevatorManager::AtFloor(f));
             }
             prev_floor = floor;
         }
