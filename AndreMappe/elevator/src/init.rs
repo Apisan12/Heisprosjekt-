@@ -12,7 +12,6 @@ use crate::messages::{
 };
 
 use crate::driver::input;
-use crate::fsm::fsm as f;
 use crate::network::network::network_manager;
 use crate::network::world_view;
 use crate::orders::call_manager;

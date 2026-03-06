@@ -3,9 +3,7 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
-use crate::{
-    messages::{Call, ElevStatus, MsgToCallManager, MsgToWorldView, NodeId},
-};
+use crate::messages::{Call, ElevStatus, MsgToCallManager, MsgToWorldView, NodeId};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevs: HashMap<NodeId, ElevStatus>,
@@ -14,7 +12,7 @@ pub struct WorldView {
 impl WorldView {
     pub fn new(initial_status: ElevStatus) -> Self {
         let mut elevs = HashMap::new();
-        elevs.insert(initial_status.id, initial_status);
+        elevs.insert(initial_status.elev_id, initial_status);
         Self { elevs }
     }
 
@@ -27,14 +25,19 @@ impl WorldView {
     /// This works as an acknoledgment
     pub fn merge_hall_calls(&mut self, elev_id: NodeId) {
         let mut all_hall_calls = HashSet::new();
+        let mut all_finished_calls = HashSet::new();
 
         for elev in self.elevs.values() {
             all_hall_calls.extend(elev.hall_calls.iter().copied());
+            all_finished_calls.extend(elev.finished_hall_calls.iter().copied());
         }
 
         if let Some(elev) = self.elevs.get_mut(&elev_id) {
             for call in all_hall_calls {
                 elev.hall_calls.insert(call);
+            }
+            for call in all_finished_calls {
+                elev.finished_hall_calls.insert(call);
             }
         }
     }
@@ -120,18 +123,18 @@ pub async fn world_manager(
 
                 let _ = tx_network.send(elev.clone());
             }
-            MsgToWorldView::UpdateLocalElevState(this_elev) => {
+            MsgToWorldView::UpdateLocalElevStatus(local_elev) => {
                 // update behaviour, floor, direction in worldview for this elevators id
                 let elev = world.local_elev_mut(&elev_id);
-                elev.behaviour = this_elev.behaviour;
-                elev.floor = this_elev.floor;
-                elev.direction = this_elev.direction;
+                elev.behaviour = local_elev.behaviour;
+                elev.floor = local_elev.floor;
+                elev.direction = local_elev.direction;
 
                 let _ = tx_network.send(elev.clone());
             }
-            MsgToWorldView::NewRemoteElevState(other_elev) => {
+            MsgToWorldView::NewRemoteElevState(remote_elev) => {
                 // Add the updated elevator state to the world
-                world.elevs.insert(other_elev.id, other_elev);
+                world.elevs.insert(remote_elev.elev_id, remote_elev);
                 world.merge_hall_calls(elev_id);
 
                 // Sends the new world view to call manager
@@ -141,6 +144,13 @@ pub async fn world_manager(
 
                 let elev = world.local_elev(&elev_id);
                 let _ = tx_network.send(elev.clone());
+            }
+            MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
+                world.elevs.remove(&remote_elev_id);
+
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
             }
         }
     }

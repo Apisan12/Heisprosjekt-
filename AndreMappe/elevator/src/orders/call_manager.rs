@@ -99,7 +99,7 @@ pub async fn call_manager(
                 }
             }
 
-            MsgToCallManager::RestoreCabCalls(calls) => {
+            MsgToCallManager::_RestoreCabCalls(calls) => {
                 for call in calls {
                     elev.call_button_light(call.floor, call.call_type, true);
                 }

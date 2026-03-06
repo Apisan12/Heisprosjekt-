@@ -1,6 +1,6 @@
 mod config;
 mod driver;
-mod fsm;
+mod elevator;
 mod init;
 mod messages;
 mod network;

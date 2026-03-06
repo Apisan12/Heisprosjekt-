@@ -24,7 +24,7 @@ pub async fn fsm(
             MsgToFsm::AtFloor(floor) => {
                 should_stop();
             }
-            MsgToFsm::OrdersUpdated(orders) => {
+            MsgToFsm::AddCall(orders) => {
                 next_stop();
             }
             MsgToFsm::DoorTimeout => {
