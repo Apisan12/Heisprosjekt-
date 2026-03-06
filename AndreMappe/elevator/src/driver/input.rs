@@ -25,7 +25,7 @@ let mut prev_buttons = vec![[false; 3]; elevator.num_floors as usize];
 let mut prev_floor: Option<u8> = None;
 // let mut prev_stop = false;
 // let mut prev_obstruction = false;
-let mut seq = 1;
+let mut seq: u64 = 0;
 
     loop {
         // --- Call buttons ---
@@ -38,7 +38,7 @@ let mut seq = 1;
                         elev_id: elev_id,
                         seq: seq,
                     };
-                    seq += 1;
+                    seq = seq.wrapping_add(1);
                     let call = Call {
                         id: call_id,
                         floor: floor,

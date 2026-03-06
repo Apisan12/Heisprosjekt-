@@ -62,7 +62,7 @@ impl ElevatorStatus {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CallId {
     pub elev_id: NodeId,
-    pub seq: u32,
+    pub seq: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
