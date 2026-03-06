@@ -148,8 +148,9 @@ pub async fn world_manager(
                 let _ = tx_network.send(elev.clone());
             }
             MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
-                if let Some(*disconnected_elevator) = world.elevs.get(&remote_elev_id);
-                world.disconnected_elevators.insert(remote_elev_id,disconnected_elevator);
+                if let Some(disconnected_elevator) = world.elevs.get(&remote_elev_id) {
+                    world.disconnected_elevators.insert(remote_elev_id,disconnected_elevator);
+                }
 
                 world.elevs.remove(&remote_elev_id);
 
