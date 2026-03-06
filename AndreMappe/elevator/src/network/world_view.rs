@@ -7,7 +7,9 @@ use crate::messages::{Call, ElevStatus, MsgToCallManager, MsgToWorldView, NodeId
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevs: HashMap<NodeId, ElevStatus>,
+    disconnected_elevators: HashMap<NodeId, ElevatorStatus>,
 }
+
 
 impl WorldView {
     pub fn new(initial_status: ElevStatus) -> Self {
@@ -146,6 +148,9 @@ pub async fn world_manager(
                 let _ = tx_network.send(elev.clone());
             }
             MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
+                if let Some(*disconnected_elevator) = world.elevs.get(&remote_elev_id);
+                world.disconnected_elevators.insert(remote_elev_id,disconnected_elevator);
+
                 world.elevs.remove(&remote_elev_id);
 
                 let _ = tx_manager_msg
