@@ -7,7 +7,6 @@ use crate::messages::{Call, ElevatorStatus, MsgToCallManager, MsgToWorldView, No
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevs: HashMap<NodeId, ElevatorStatus>,
-    disconnected_elevators: HashMap<NodeId, ElevatorStatus>,
 }
 
 
@@ -15,6 +14,7 @@ impl WorldView {
     pub fn new(initial_status: ElevatorStatus) -> Self {
         let mut elevs = HashMap::new();
         elevs.insert(initial_status.elev_id, initial_status);
+
         Self { elevs }
     }
 

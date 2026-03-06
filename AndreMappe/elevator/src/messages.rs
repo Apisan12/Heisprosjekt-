@@ -33,6 +33,7 @@ pub struct ElevatorStatus {
     pub cab_calls: HashSet<Call>,
     pub hall_calls: HashSet<Call>,
     pub finished_hall_calls: HashSet<Call>,
+    pub known_cab_calls: HashSet<Call>,
 }
 
 impl ElevatorStatus {
@@ -45,6 +46,7 @@ impl ElevatorStatus {
             cab_calls: HashSet::new(),
             hall_calls: HashSet::new(),
             finished_hall_calls: HashSet::new(),
+            known_cab_calls: HashSet::new(),
         }
     }
 }
