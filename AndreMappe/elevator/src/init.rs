@@ -14,6 +14,7 @@ use crate::messages::{
 use crate::driver::input;
 use crate::network::network::network_manager;
 use crate::network::world_view;
+use crate::network::network::recover_startup_state;
 use crate::orders::call_manager;
 
 pub struct Channels {
@@ -96,8 +97,7 @@ pub async fn boot() -> std::io::Result<BootContext> {
     println!("Initial floor: {}", floor);
 
     // Recover cab calls from network broadcasts
-    let recovered_cab_calls =
-        network::recover_startup_state(node_id).await;
+    let recovered_cab_calls = recover_startup_state(node_id).await;
 
     println!("Recovered cab calls: {:?}", recovered_cab_calls);
 

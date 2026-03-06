@@ -9,7 +9,43 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
+use tokio::time::timeout;
 
+pub async fn recover_startup_state(node_id: NodeId) -> HashSet<Call> {
+    // Create UDP socket (same way the network manager does)
+    let socket = create_socket(NETWORK_PORT);
+    let socket = Arc::new(socket);
+
+    let mut recovered = HashSet::new();
+    let mut buf = [0u8; 4096];
+
+    // Listen window for recovery
+    let deadline = Instant::now() + Duration::from_millis(800);
+
+    while Instant::now() < deadline {
+        match timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await {
+            Ok(Ok((len, _addr))) => {
+                if let Ok(status) = bincode::deserialize::<ElevatorStatus>(&buf[..len]) {
+
+                    for call in &status.known_cab_calls {
+                        if call.id.elev_id == node_id {
+                            recovered.insert(call.clone());
+                        }
+                    }
+
+                }
+            }
+
+            // recv_from error
+            Ok(Err(_)) => {}
+
+            // timeout expired
+            Err(_) => {}
+        }
+    }
+
+    recovered
+}
 
 
 // Lager UDP socket
