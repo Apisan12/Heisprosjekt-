@@ -8,7 +8,7 @@ mod orders;
 mod tests;
 
 use crate::messages::NodeId;
-use messages::ElevStatus;
+use messages::ElevatorStatus;
 use orders::assigner;
 
 
@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
         .expect("failed to determine initial floor");
     // Lager en initial elev status som brukes som en "mal" til network watch channelen
     // Brukes også til å initialisere worldview med denne som sin peer_state.
-    let initial_elev_status = ElevStatus::new(slot_id, floor);
+    let initial_elev_status = ElevatorStatus::new(slot_id, floor);
 
     // Channels 
     let channels = init::Channels::new(initial_elev_status.clone());

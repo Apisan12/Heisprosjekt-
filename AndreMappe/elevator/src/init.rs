@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::config::*;
 use crate::messages::{
-    ElevStatus, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId,
+    ElevatorStatus, MsgToCallManager, MsgToFsm, MsgToWorldView, NodeId,
 };
 
 use crate::driver::input;
@@ -23,12 +23,12 @@ pub struct Channels {
     pub rx_fsm: mpsc::Receiver<MsgToFsm>,
     pub tx_world: mpsc::Sender<MsgToWorldView>,
     pub rx_world: mpsc::Receiver<MsgToWorldView>,
-    pub tx_net: watch::Sender<ElevStatus>,
-    pub rx_net: watch::Receiver<ElevStatus>,
+    pub tx_net: watch::Sender<ElevatorStatus>,
+    pub rx_net: watch::Receiver<ElevatorStatus>,
 }
 
 impl Channels {
-    pub fn new(initial_status: ElevStatus) -> Self {
+    pub fn new(initial_status: ElevatorStatus) -> Self {
         let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
         let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToFsm>(32);
         let (tx_world, rx_world) = mpsc::channel::<MsgToWorldView>(32);
@@ -102,7 +102,7 @@ pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 pub fn spawn_tasks(
     elev_id: NodeId,
     elevator: e::Elevator,
-    initial_elev_status: ElevStatus,
+    initial_elev_status: ElevatorStatus,
     floor: u8,
     channels: Channels,
 ) {

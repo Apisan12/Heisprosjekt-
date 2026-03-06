@@ -25,7 +25,7 @@ pub enum Direction {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ElevStatus {
+pub struct ElevatorStatus {
     pub elev_id: NodeId,
     pub behaviour: Behaviour,
     pub floor: u8,
@@ -35,7 +35,7 @@ pub struct ElevStatus {
     pub finished_hall_calls: HashSet<Call>,
 }
 
-impl ElevStatus {
+impl ElevatorStatus {
     pub fn new(id: NodeId, floor: u8) -> Self {
         Self {
             elev_id: id,
@@ -120,6 +120,6 @@ pub enum MsgToWorldView {
     AddCabCall(Call),
     RemoveCabCall(Call),
     UpdateLocalElevStatus(LocalElevatorStatus),
-    NewRemoteElevState(ElevStatus),
+    NewRemoteElevState(ElevatorStatus),
     RemoveDisconnectedElevator(NodeId),
 }

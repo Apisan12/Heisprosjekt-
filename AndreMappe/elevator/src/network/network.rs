@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use crate::config::NETWORK_PORT;
-use crate::messages::{ElevStatus, MsgToWorldView, NodeId};
+use crate::messages::{ElevatorStatus, MsgToWorldView, NodeId};
 
 // Lager UDP socket
 // Greier for å kunne åpne flere sockets på samme IP på windows (For å kjøre flere heisprogram på samme IP)
@@ -39,7 +39,7 @@ pub fn create_socket(port: u16) -> Arc<UdpSocket> {
 }
 
 pub async fn network_manager(
-    mut rx_network: watch::Receiver<ElevStatus>,
+    mut rx_network: watch::Receiver<ElevatorStatus>,
     tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(100));
@@ -85,7 +85,7 @@ pub async fn network_manager(
 
             Ok((len, _)) = socket.recv_from(&mut buf) => {
                 if let Ok(remote_elevator_state) =
-                    bincode::deserialize::<ElevStatus>(&buf[..len])
+                    bincode::deserialize::<ElevatorStatus>(&buf[..len])
                 {
                     if remote_elevator_state.elev_id == local_elevator_state.elev_id {
                         continue;
