@@ -137,7 +137,7 @@ pub async fn network_manager(
 
 
 
-                            known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state));
+                            known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state.clone()));
 
                             let _ = tx_world_view_msg
                                         .send(MsgToWorldView::NewRemoteElevState(remote_elevator_state))

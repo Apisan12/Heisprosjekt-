@@ -62,11 +62,13 @@ pub fn get_mac_node_id() -> NodeId {
 
 /// Parse elevator id from CLI args.
 /// Expects: cargo run -- <id>
-pub fn parse_id() -> u8 {
-    std::env::args()
+pub fn parse_id() -> NodeId {
+    let n: u8 = std::env::args()
         .nth(1)
         .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
+        .unwrap_or(0);
+
+    [0, 0, 0, 0, 0, n]
 }
 
 pub struct BootContext {
@@ -79,16 +81,18 @@ pub struct BootContext {
 
 pub async fn boot() -> std::io::Result<BootContext> {
 
+    // USE THIS WHEN PARSING THREE IDS ON ONE COMPUTER
     // Simulator slot (only used for port selection) when runnning several instances local
-    let slot = parse_id();
+    let node_id = parse_id();
 
+    // USE THIS WHEN USING THREE DIFFERENT COMPUTERS
     // Real elevator identity (MAC address)
-    let node_id = get_mac_node_id();
+    // let node_id = get_mac_node_id();
 
     println!("Node ID (MAC): {:?}", node_id);
 
     // Connect to elevator driver
-    let elevator = init_elevator(slot)?;
+    let elevator = init_elevator(node_id)?;
 
     // Find initial floor
     let floor = initial_floor(&elevator)
@@ -122,8 +126,8 @@ pub async fn boot() -> std::io::Result<BootContext> {
 
 
 /// Initialize elevator driver connection and return the Elevator handle.
-pub fn init_elevator(slot: u8) -> std::io::Result<e::Elevator> {
-    let port = BASE_ELEVATOR_PORT + slot as u32;
+pub fn init_elevator(slot: NodeId) -> std::io::Result<e::Elevator> {
+    let port = BASE_ELEVATOR_PORT + slot[5] as u32;
     let addr = format!("localhost:{}", port);
 
     let elevator = e::Elevator::init(&addr, ELEV_NUM_FLOORS)?;
