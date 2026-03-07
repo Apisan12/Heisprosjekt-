@@ -44,7 +44,8 @@ let mut seq: u64 = 0;
                         floor: floor,
                         call_type: call,
                     };
-                    let _ = tx_world_view_msg.send(MsgToWorldView::AddCall(call));
+                    let _ = tx_world_view_msg.blocking_send(MsgToWorldView::AddCall(call));
+                    println!("Call sent to WorldView: {}", call)
                 }
 
                 prev_buttons[floor as usize][call as usize] = pressed;
@@ -56,7 +57,7 @@ let mut seq: u64 = 0;
 
         if floor != prev_floor {
             if let Some(f) = floor {
-                let _ = tx_fsm_msg.send(MsgToElevatorManager::AtFloor(f));
+                let _ = tx_fsm_msg.blocking_send(MsgToElevatorManager::AtFloor(f));
             }
             prev_floor = floor;
         }

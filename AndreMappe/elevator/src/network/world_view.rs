@@ -180,6 +180,7 @@ pub async fn world_manager(
         match msg {
             MsgToWorldView::AddCall(call) => {
                 let elevator = world.local_elev_mut(&elev_id);
+                println!("Call recieved in WorldView: {}", call);
                 match call.call_type {
                     CAB => {
                         elevator.cab_calls.insert(call);

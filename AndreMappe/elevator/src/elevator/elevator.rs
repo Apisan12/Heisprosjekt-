@@ -74,21 +74,6 @@ impl Elevator {
             .any(|call| call.floor < self.current_floor)
     }
 
-    fn should_serve_here(&self) -> bool {
-        self.calls.iter().any(|call| {
-            call.floor == self.current_floor
-                && match call.call_type {
-                    CAB => true,
-
-                    HALL_UP => self.direction == Direction::Up || !self.has_calls_above(),
-
-                    HALL_DOWN => self.direction == Direction::Down || !self.has_calls_below(),
-
-                    _ => false,
-                }
-        })
-    }
-
     fn next_direction(&self) -> Direction {
         if self.direction != Direction::Down && self.has_calls_above() {
             Direction::Up
@@ -99,7 +84,55 @@ impl Elevator {
         }
     }
 
+    fn service_direction(&self) -> Direction {
+        if self.direction == Direction::Up && self.has_calls_above() {
+            return Direction::Up;
+        }
+
+        if self.direction == Direction::Down && self.has_calls_below() {
+            return Direction::Down;
+        }
+
+        // No calls ahead → serve calls at this floor
+        let has_up = self
+            .calls
+            .iter()
+            .any(|c| c.floor == self.current_floor && c.call_type == HALL_UP);
+
+        let has_down = self
+            .calls
+            .iter()
+            .any(|c| c.floor == self.current_floor && c.call_type == HALL_DOWN);
+
+        if has_up {
+            Direction::Up
+        } else if has_down {
+            Direction::Down
+        } else {
+            Direction::Stop
+        }
+    }
+
+    fn should_serve_here(&self) -> bool {
+        let dir = self.service_direction();
+
+        self.calls.iter().any(|call| {
+            call.floor == self.current_floor
+                && match call.call_type {
+                    CAB => true,
+
+                    HALL_UP => dir == Direction::Up,
+
+                    HALL_DOWN => dir == Direction::Down,
+
+                    _ => false,
+                }
+        })
+    }
+
     fn served_calls(&self) -> HashSet<Call> {
+        let dir = self.service_direction();
+
         self.calls
             .iter()
             .filter(|call| {
@@ -107,9 +140,9 @@ impl Elevator {
                     && match call.call_type {
                         CAB => true,
 
-                        HALL_UP => self.direction == Direction::Up || !self.has_calls_above(),
+                        HALL_UP => dir == Direction::Up,
 
-                        HALL_DOWN => self.direction == Direction::Down || !self.has_calls_below(),
+                        HALL_DOWN => dir == Direction::Down,
 
                         _ => false,
                     }
@@ -187,17 +220,26 @@ pub async fn elevator_manager(
 
                 if elevator.state == ElevatorState::Moving && elevator.should_serve_here() {
                     elevator.driver.motor_direction(elev::DIRN_STOP);
-                    elevator.open_door(tx_elevator_manager.clone());
                     elevator.serve_current_floor(&tx_call_manager).await;
+                    elevator.open_door(tx_elevator_manager.clone());
+
                     elevator.send_status_update(&tx_world_manager).await;
+                }
+
+                if floor == 0 || floor == 3  {
+                    elevator.driver.motor_direction(elev::DIRN_STOP);
                 }
             }
             MsgToElevatorManager::ActiveCalls(calls) => {
                 elevator.calls = calls;
                 if elevator.state == ElevatorState::Idle {
                     if elevator.should_serve_here() {
-                        elevator.open_door(tx_elevator_manager.clone());
+                        if elevator.direction == Direction::Stop {
+                            elevator.direction = elevator.next_direction();
+                        }
+
                         elevator.serve_current_floor(&tx_call_manager).await;
+                        elevator.open_door(tx_elevator_manager.clone());
                     } else {
                         elevator.serve_next_action();
                     }
@@ -207,8 +249,8 @@ pub async fn elevator_manager(
             MsgToElevatorManager::DoorClosed => {
                 elevator.driver.door_light(false);
                 if elevator.should_serve_here() {
-                    elevator.open_door(tx_elevator_manager.clone());
                     elevator.serve_current_floor(&tx_call_manager).await;
+                    elevator.open_door(tx_elevator_manager.clone());
                 } else {
                     elevator.serve_next_action();
                 }
