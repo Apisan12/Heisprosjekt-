@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
-use crate::elevator;
 use crate::messages::{Call, ElevatorStatus, MsgToCallManager, MsgToWorldView, NodeId};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
@@ -189,6 +188,7 @@ pub async fn world_manager(
                     HALL_DOWN | HALL_UP => {
                         elevator.hall_calls.insert(call);
                     }
+                    _ => {}
                 }
                 let _ = tx_network.send(elevator.clone());
             }
@@ -201,6 +201,7 @@ pub async fn world_manager(
                     HALL_DOWN | HALL_UP => {
                         elevator.finished_hall_calls.insert(call);
                     }
+                    _ => {}
                 }
 
                 let _ = tx_network.send(elevator.clone());

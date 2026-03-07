@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use driver_rust::elevio::elev::Elevator;
 
-use crate::messages::{Call, CallId, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId};
+use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldView, NodeId};
 
 /// Spawns the hardware polling thread.
 ///

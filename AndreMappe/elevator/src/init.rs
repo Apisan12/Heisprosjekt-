@@ -16,6 +16,7 @@ use crate::network::network::network_manager;
 use crate::network::world_view;
 use crate::network::network::recover_startup_state;
 use crate::orders::call_manager;
+use crate::elevator::elevator::{ElevatorState, elevator_manager};
 
 pub struct Channels {
     pub tx_manager: mpsc::Sender<MsgToCallManager>,
@@ -171,7 +172,7 @@ pub fn spawn_tasks(
     input::spawn_input_thread(
         elev_id,
         elevator.clone(),
-        tx_manager_msg.clone(),
+        tx_world_view_msg.clone(),
         tx_fsm_msg.clone(),
         ELEV_POLL,
     );
@@ -201,9 +202,9 @@ pub fn spawn_tasks(
     ));
 
     // FSM
-    tokio::spawn(f::fsm(
+    tokio::spawn(elevator_manager(
         elevator.clone(),
-        f::ElevatorState::Idle,
+        ElevatorState::Idle,
         floor,
         rx_fsm_msg,
         tx_manager_msg.clone(),
