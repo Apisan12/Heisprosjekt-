@@ -21,6 +21,7 @@ pub async fn call_manager(
     let mut previous_active_hall_calls: HashSet<Call> = HashSet::new();
 
     while let Some(msg) = rx_manager_msg.recv().await {
+        println!("CallManager received message: {:?}", msg);
         match msg {
             MsgToCallManager::NewWorldView(world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
