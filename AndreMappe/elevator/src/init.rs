@@ -18,6 +18,7 @@ use crate::network::network::recover_startup_state;
 use crate::orders::call_manager;
 use crate::elevator::elevator::{ElevatorState, elevator_manager};
 
+#[derive(Debug)]
 pub struct Channels {
     pub tx_manager: mpsc::Sender<MsgToCallManager>,
     pub rx_manager: mpsc::Receiver<MsgToCallManager>,
@@ -71,6 +72,7 @@ pub fn parse_id() -> NodeId {
     [0, 0, 0, 0, 0, n]
 }
 
+#[derive(Debug)]
 pub struct BootContext {
     pub node_id: NodeId,
     pub elevator: e::Elevator,
@@ -115,13 +117,17 @@ pub async fn boot() -> std::io::Result<BootContext> {
     // Create communication channels
     let channels = Channels::new(initial_status.clone());
 
-    Ok(BootContext {
-        node_id,
-        elevator,
-        floor,
-        initial_status,
-        channels,
-    })
+    let bootCtx = BootContext {
+    node_id,
+    elevator,
+    floor,
+    initial_status,
+    channels,
+};
+
+    println!("BootContext: {:?}", bootCtx);
+
+    Ok(bootCtx)
 }
 
 
