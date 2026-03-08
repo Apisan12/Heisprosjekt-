@@ -130,6 +130,8 @@ pub fn init_elevator(slot: NodeId) -> std::io::Result<e::Elevator> {
     let port = BASE_ELEVATOR_PORT + slot[5] as u32;
     let addr = format!("localhost:{}", port);
 
+    println!("Init_elevator port: {}", port);
+
     let elevator = e::Elevator::init(&addr, ELEV_NUM_FLOORS)?;
     println!("Elevator started:\n{:#?}", elevator);
 
