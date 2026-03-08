@@ -82,7 +82,7 @@ pub struct BootContext {
 }
 
 pub async fn boot() -> std::io::Result<BootContext> {
-
+    println!("Starting boot");
     // USE THIS WHEN PARSING THREE IDS ON ONE COMPUTER
     // Simulator slot (only used for port selection) when runnning several instances local
     let node_id = parse_id();
@@ -123,9 +123,11 @@ pub async fn boot() -> std::io::Result<BootContext> {
     floor,
     initial_status,
     channels,
-};
+    };
 
     println!("BootContext: {:?}", bootCtx);
+
+    println!("Boot finished");
 
     Ok(bootCtx)
 }
@@ -169,6 +171,8 @@ pub fn spawn_tasks(
     floor: u8,
     channels: Channels,
 ) {
+    println!("Starting tasks");
+
     let Channels {
         tx_manager: tx_manager_msg,
         rx_manager: rx_manager_msg,
@@ -223,6 +227,9 @@ pub fn spawn_tasks(
         tx_fsm_msg.clone(),
         tx_world_view_msg.clone(),
     ));
+
+    println!("Tasks started successfully");
+
 }
 
 
