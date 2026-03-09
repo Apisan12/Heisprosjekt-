@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::config::*;
 use crate::messages::{
-    ElevatorStatus, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId,
+    CallList, ElevatorStatus, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId
 };
 
 use crate::driver::input;
@@ -106,7 +106,7 @@ pub async fn boot() -> std::io::Result<BootContext> {
     // Recover cab calls from network broadcasts
     let recovered_cab_calls = recover_startup_state(node_id).await;
 
-    println!("Recovered cab calls: {:?}", recovered_cab_calls);
+    println!("Recovered cab calls: {}", CallList(&recovered_cab_calls));
 
     // Create initial elevator status
     let mut initial_status = ElevatorStatus::new(node_id, floor);
