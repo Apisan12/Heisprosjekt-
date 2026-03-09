@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
+use crate::elevator;
 use crate::messages::{Call, ElevatorStatus, MsgToCallManager, MsgToWorldView, NodeId};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
@@ -61,7 +62,7 @@ impl WorldView {
     /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
     pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
         let mut all_cab_calls = HashSet::new();
-        
+
 
         for elevator in self.elevators.values() {
             all_cab_calls.extend(elevator.cab_calls.iter().copied());
@@ -166,7 +167,18 @@ impl WorldView {
             }
         }
     }
+    pub fn remove_disconnected_elevators(&mut self, elev_id: &NodeId) {
+        if let Some(local_elev) = self.elevators.get(elev_id) {
+            let disconnected: Vec<NodeId> =
+                local_elev.disconnected_elevators.iter().cloned().collect();
+
+            for id in disconnected {
+                self.elevators.remove(&id);
+            }
+        }
+    }
 }
+    
 
 pub async fn world_manager(
     elev_id: NodeId,
@@ -235,9 +247,17 @@ pub async fn world_manager(
                 let elev = world.local_elev(&elev_id);
                 let _ = tx_network.send(elev.clone());
             }
-            MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
-                world.elevators.remove(&remote_elev_id);
+            MsgToWorldView::AddDisconnectedElevator(remote_elev_id) => {
+                let elevator = world.local_elev_mut(&elev_id);
+                elevator.disconnected_elevators.insert(remote_elev_id);
 
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+            MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
+                let elevator = world.local_elev_mut(&elev_id);
+                elevator.disconnected_elevators.remove(&remote_elev_id);
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;

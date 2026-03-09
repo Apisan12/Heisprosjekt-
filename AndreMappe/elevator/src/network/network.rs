@@ -111,7 +111,7 @@ pub async fn network_manager(
 
                                         for elev_id in disconnected {
                                             let _ = tx_world_view_msg
-                                                .send(MsgToWorldView::RemoveDisconnectedElevator(elev_id))
+                                                .send(MsgToWorldView::AddDisconnectedElevator(elev_id))
                                                 .await;
                                         }
 
@@ -134,6 +134,9 @@ pub async fn network_manager(
 
                                             if disconnected_elevators.remove(&elev_id).is_some() {
                                                 println!("Known elevator reconnected: {:?}", elev_id);
+                                                let _ = tx_world_view_msg
+                                                    .send(MsgToWorldView::RemoveDisconnectedElevator(elev_id))
+                                                    .await;
                                             } else if !known_elevators.contains_key(&elev_id) {
                                                 println!("New elevator on network: {:?}", elev_id);
                                             }

@@ -34,6 +34,7 @@ pub struct ElevatorStatus {
     pub hall_calls: HashSet<Call>,
     pub finished_hall_calls: HashSet<Call>,
     pub known_cab_calls: HashSet<Call>,
+    pub disconnected_elevators: HashSet<NodeId>
 }
 
 impl ElevatorStatus {
@@ -47,6 +48,7 @@ impl ElevatorStatus {
             hall_calls: HashSet::new(),
             finished_hall_calls: HashSet::new(),
             known_cab_calls: HashSet::new(),
+            disconnected_elevators: HashSet::new(),
         }
     }
 }
@@ -131,5 +133,6 @@ pub enum MsgToWorldView {
     ServedCall(Call),
     UpdateLocalElevStatus(LocalElevatorStatus),
     NewRemoteElevState(ElevatorStatus),
+    AddDisconnectedElevator(NodeId),
     RemoveDisconnectedElevator(NodeId),
 }

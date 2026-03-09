@@ -23,8 +23,10 @@ pub async fn call_manager(
     while let Some(msg) = rx_manager_msg.recv().await {
         // println!("CallManager received message: {:?}", msg);
         match msg {
-            MsgToCallManager::NewWorldView(world) => {
+            MsgToCallManager::NewWorldView(mut world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
+
+                world.remove_disconnected_elevators(&elev_id);
 
                 let active_cab_calls = world.active_cab_calls(&elev_id);
                 for call in active_cab_calls {
