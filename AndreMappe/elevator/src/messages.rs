@@ -24,7 +24,7 @@ pub enum Direction {
     Stop,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ElevatorStatus {
     pub elev_id: NodeId,
     pub behaviour: Behaviour,
@@ -91,6 +91,20 @@ impl fmt::Display for Call {
             self.floor,
             call_type
         )
+    }
+}
+
+pub struct CallList<'a>(pub&'a HashSet<Call>);
+
+impl<'a> fmt::Display for CallList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let list = self.0
+            .iter()
+            .map(|c| format!("{}", c))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        write!(f, "{}", list)
     }
 }
 
