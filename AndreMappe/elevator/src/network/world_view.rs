@@ -193,7 +193,7 @@ pub async fn world_manager(
                     }
                     _ => {}
                 }
-                println!("Transmitting to network:\n{:#?}", elevator);
+                println!("Transmitting to network:\n{}", call);
                 let _ = tx_network.send(elevator.clone());
             }
             MsgToWorldView::ServedCall(call) => {

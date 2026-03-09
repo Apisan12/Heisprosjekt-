@@ -89,6 +89,7 @@ pub async fn network_manager(
         tokio::select! {
 
                     Ok(_) = rx_network.changed() => {
+                        println!("network_manager recieved a message.");
                         local_elevator_state = rx_network.borrow().clone();
                     }
 
