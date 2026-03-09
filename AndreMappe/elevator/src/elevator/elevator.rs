@@ -31,16 +31,16 @@ pub struct LocalElevatorStatus {
     pub floor: u8,
     pub direction: Direction,
     pub behaviour: Behaviour,
-    pub obstructed: bool,
+    pub is_obstructed: bool,
 }
 
 impl LocalElevatorStatus {
-    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour) -> Self {
+    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour, is_obstructed: bool) -> Self {
         Self {
             floor,
             direction,
             behaviour,
-            obstructed: false,
+            is_obstructed,
         }
     }
 }
@@ -51,7 +51,7 @@ struct Elevator {
     current_floor: u8,
     direction: Direction,
     calls: HashSet<Call>,
-    obstructed: bool,
+    is_obstructed: bool,
 }
 
 impl Elevator {
@@ -62,7 +62,7 @@ impl Elevator {
             current_floor: initial_floor,
             direction: Direction::Stop,
             calls: HashSet::new(),
-            obstructed: driver.obstruction(),
+            is_obstructed: driver.obstruction(),
         }
     }
 
@@ -196,7 +196,7 @@ impl Elevator {
 
     async fn send_status_update(&self, tx_world_manager: &mpsc::Sender<MsgToWorldView>) {
         let status =
-            LocalElevatorStatus::new(self.current_floor, self.direction, self.state.behaviour());
+            LocalElevatorStatus::new(self.current_floor, self.direction, self.state.behaviour(), self.is_obstructed);
 
         let _ = tx_world_manager
             .send(MsgToWorldView::UpdateLocalElevStatus(status))
@@ -235,6 +235,10 @@ pub async fn elevator_manager(
                 }
             }
             MsgToElevatorManager::ActiveCalls(calls) => {
+                if elevator.is_obstructed {
+                    continue;
+                }
+
                 elevator.calls = calls;
                 if elevator.state == ElevatorState::Idle {
                     if elevator.should_serve_here() {
@@ -251,7 +255,7 @@ pub async fn elevator_manager(
                 }
             }
             MsgToElevatorManager::DoorClosed => {
-                if elevator.obstructed {
+                if elevator.is_obstructed {
                     elevator.open_door(tx_elevator_manager.clone());
                     continue;
                 }
@@ -266,7 +270,7 @@ pub async fn elevator_manager(
                 elevator.send_status_update(&tx_world_manager).await;
             }
             MsgToElevatorManager::Obstruction(is_obstructed) => {
-                elevator.obstructed = is_obstructed;
+                elevator.is_obstructed = is_obstructed;
                 println!("Is obstructed: {}", is_obstructed);
                 if is_obstructed && elevator.state == ElevatorState::DoorOpen {
                         elevator.open_door(tx_elevator_manager.clone());

@@ -51,11 +51,14 @@ impl AssignerState {
 }
 
 pub fn run_assigner(
-    world: &WorldView,
+    mut world: WorldView,
     active_calls: &HashSet<Call>,
     elev_id: NodeId,
 ) -> HashSet<Call> {
-    let input = build_assigner_input(world, &active_calls);
+    world.remove_disconnected_elevators(&elev_id);
+                world.remove_obstructed_elevators();
+
+    let input = build_assigner_input(&world, &active_calls);
 
     let json_input = serde_json::to_string(&input).unwrap();
 
@@ -75,9 +78,11 @@ pub fn run_assigner(
         serde_json::from_str(&stdout).expect("invalid assigner output");
 
     let my_key = format!("id_{elev_id:?}");
-    let my_assigned_matrix = assigned_matrix
-        .get(&my_key)
-        .expect("assigner missing my id");
+    let my_assigned_matrix = match assigned_matrix
+        .get(&my_key){
+            Some(matrix) => matrix,
+            None => return HashSet::new(),
+        };
 
     assigned_matrix_to_calls(&active_calls, my_assigned_matrix)
 

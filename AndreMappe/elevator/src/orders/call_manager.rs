@@ -26,9 +26,6 @@ pub async fn call_manager(
             MsgToCallManager::NewWorldView(mut world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
 
-                world.remove_disconnected_elevators(&elev_id);
-                world.remove_obstructed_elevators();
-
                 let active_cab_calls = world.active_cab_calls(&elev_id);
                 for call in active_cab_calls {
                     driver.call_button_light(call.floor, call.call_type, true);
@@ -46,7 +43,9 @@ pub async fn call_manager(
                 }
                 // Update stored active set
                 previous_active_hall_calls = active_hall_calls.clone();
-                let assigned_calls = assigner::run_assigner(&world, &active_hall_calls, elev_id);
+
+                
+                let assigned_calls = assigner::run_assigner(world.clone(), &active_hall_calls, elev_id);
                 for call in assigned_calls {
                     all_active_calls.insert(call);
                 }

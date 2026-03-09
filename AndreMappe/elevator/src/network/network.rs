@@ -203,4 +203,7 @@ fn print_state_change(old: &ElevatorStatus, new: &ElevatorStatus) {
         println!("Old: {}", CallList(&old.known_cab_calls));
         println!("New: {}", CallList(&new.known_cab_calls));
     }
+    if old.is_obstructed != new.is_obstructed {
+        println!("Obstruction changed: {}", new.is_obstructed);
+    }
 }
