@@ -125,7 +125,7 @@ pub async fn boot() -> std::io::Result<BootContext> {
     channels,
     };
 
-    println!("BootContext: {:?}", bootCtx);
+    // println!("BootContext: {:?}", bootCtx);
 
     println!("Boot finished");
 

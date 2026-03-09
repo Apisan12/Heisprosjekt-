@@ -61,6 +61,7 @@ impl WorldView {
     /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
     pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
         let mut all_cab_calls = HashSet::new();
+        
 
         for elevator in self.elevators.values() {
             all_cab_calls.extend(elevator.cab_calls.iter().copied());
