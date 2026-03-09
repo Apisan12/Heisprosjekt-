@@ -18,6 +18,8 @@ use crate::network::network::recover_startup_state;
 use crate::orders::call_manager;
 use crate::elevator::elevator::{ElevatorState, elevator_manager};
 
+use crate::network::network::*;
+
 #[derive(Debug)]
 pub struct Channels {
     pub tx_manager: mpsc::Sender<MsgToCallManager>,
@@ -83,6 +85,15 @@ pub struct BootContext {
 
 pub async fn boot() -> std::io::Result<BootContext> {
     println!("Starting boot");
+
+    
+    if !test_network_self_send().await {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotConnected,
+            "network self-test failed",
+        ));
+    }
+
     // USE THIS WHEN PARSING THREE IDS ON ONE COMPUTER
     // Simulator slot (only used for port selection) when runnning several instances local
     let node_id = parse_id();
