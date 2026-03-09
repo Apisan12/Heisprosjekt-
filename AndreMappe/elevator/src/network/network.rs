@@ -89,7 +89,7 @@ pub async fn network_manager(
         tokio::select! {
 
                     Ok(_) = rx_network.changed() => {
-                        println!("network_manager recieved a message.");
+                        // println!("network_manager recieved a message.");
                         local_elevator_state = rx_network.borrow().clone();
                     }
 
@@ -98,7 +98,7 @@ pub async fn network_manager(
                         let mut disconnected = Vec::new();
 
                         known_elevators.retain(|elev_id, (last_seen, status)| {
-                            if now.duration_since(*last_seen) >= Duration::from_secs(1) {
+                            if now.duration_since(*last_seen) >= Duration::from_secs(3) {
                                 println!("Elevator disconnected: {:?}", elev_id);
 
                                 disconnected_elevators.insert(*elev_id,status.clone());

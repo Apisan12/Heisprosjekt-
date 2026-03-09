@@ -183,12 +183,12 @@ pub async fn world_manager(
                 println!("Call recieved in WorldView: {}", call);
                 match call.call_type {
                     CAB => {
-                        println!("Cab call recieved.");
+                        
                         elevator.cab_calls.insert(call);
                         elevator.known_cab_calls.insert(call);
                     }
                     HALL_DOWN | HALL_UP => {
-                        println!("Hall call recieved.");
+                        
                         elevator.hall_calls.insert(call);
                     }
                     _ => {}
