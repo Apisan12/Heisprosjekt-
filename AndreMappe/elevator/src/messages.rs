@@ -34,7 +34,8 @@ pub struct ElevatorStatus {
     pub hall_calls: HashSet<Call>,
     pub finished_hall_calls: HashSet<Call>,
     pub known_cab_calls: HashSet<Call>,
-    pub disconnected_elevators: HashSet<NodeId>
+    pub disconnected_elevators: HashSet<NodeId>,
+    pub obstructed: bool,
 }
 
 impl ElevatorStatus {
@@ -49,6 +50,7 @@ impl ElevatorStatus {
             finished_hall_calls: HashSet::new(),
             known_cab_calls: HashSet::new(),
             disconnected_elevators: HashSet::new(),
+            obstructed: false,
         }
     }
 }
@@ -117,6 +119,7 @@ pub enum MsgToElevatorManager {
     /// Revieves a message with the active calls every time there is a change
     ActiveCalls(HashSet<Call>),
     DoorClosed,
+    Obstruction(bool),
 }
 
 #[derive(Debug)]

@@ -1,5 +1,5 @@
 use crate::config::NETWORK_PORT;
-use crate::messages::{Call, ElevatorStatus, MsgToWorldView, NodeId, CallList};
+use crate::messages::{Call, CallList, ElevatorStatus, MsgToWorldView, NodeId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
 use std::io::Bytes;
@@ -84,91 +84,90 @@ pub async fn network_manager(
     loop {
         tokio::select! {
 
-                       Ok(_) = rx_network.changed() => {
-    let new_state = rx_network.borrow().clone();
+        Ok(_) = rx_network.changed() => {
+        let new_state = rx_network.borrow().clone();
 
-    if new_state != local_elevator_state {
-        print_state_change(&local_elevator_state, &new_state);
-        local_elevator_state = new_state;
-    }
-}
+        if new_state != local_elevator_state {
+            print_state_change(&local_elevator_state, &new_state);
+            local_elevator_state = new_state;
+        }
+        }
 
-                                    _ = tick.tick() => {
-                                        let now = Instant::now();
-                                        let mut disconnected = Vec::new();
+                                        _ = tick.tick() => {
+                                            let now = Instant::now();
+                                            let mut disconnected = Vec::new();
 
-                                        known_elevators.retain(|elev_id, (last_seen, status)| {
-                                            if now.duration_since(*last_seen) >= Duration::from_secs(3) {
-                                                println!("Elevator disconnected: {:?}", elev_id);
+                                            known_elevators.retain(|elev_id, (last_seen, status)| {
+                                                if now.duration_since(*last_seen) >= Duration::from_secs(3) {
+                                                    println!("Elevator disconnected: {:?}", elev_id);
 
-                                                disconnected_elevators.insert(*elev_id,status.clone());
-                                                disconnected.push(*elev_id);
-                                                false
-                                            } else {
-                                                true
-                                            }
-                                        });
+                                                    disconnected_elevators.insert(*elev_id,status.clone());
+                                                    disconnected.push(*elev_id);
+                                                    false
+                                                } else {
+                                                    true
+                                                }
+                                            });
 
-                                        for elev_id in disconnected {
-                                            let _ = tx_world_view_msg
-                                                .send(MsgToWorldView::AddDisconnectedElevator(elev_id))
-                                                .await;
-                                        }
-
-
-                                        let bytes = bincode::serialize(&local_elevator_state).unwrap();
-                                        let _ = socket
-                                                    .send_to(&bytes, "255.255.255.255:30000")
-                                                    .await;
-                                    }
-
-                                    Ok((len, _)) = socket.recv_from(&mut buf) => {
-                                        if let Ok(remote_elevator_state) =
-                                            bincode::deserialize::<ElevatorStatus>(&buf[..len])
-                                        {
-                                            if remote_elevator_state.elev_id == local_elevator_state.elev_id {
-                                                continue;
-                                            }
-
-                                            let elev_id = remote_elevator_state.elev_id;
-
-                                            if disconnected_elevators.remove(&elev_id).is_some() {
-                                                println!("Known elevator reconnected: {:?}", elev_id);
+                                            for elev_id in disconnected {
                                                 let _ = tx_world_view_msg
-                                                    .send(MsgToWorldView::RemoveDisconnectedElevator(elev_id))
+                                                    .send(MsgToWorldView::AddDisconnectedElevator(elev_id))
                                                     .await;
-                                            } else if !known_elevators.contains_key(&elev_id) {
-                                                println!("New elevator on network: {:?}", elev_id);
                                             }
 
 
-
-                                            known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state.clone()));
-
-                                            let _ = tx_world_view_msg
-                                                        .send(MsgToWorldView::NewRemoteElevState(remote_elevator_state))
+                                            let bytes = bincode::serialize(&local_elevator_state).unwrap();
+                                            let _ = socket
+                                                        .send_to(&bytes, "255.255.255.255:30000")
                                                         .await;
                                         }
-                                        if let Ok(initializing_elevator) =
-                                            bincode::deserialize::<NodeId>(&buf[..len])
-                                        {
-                                            if let Some(elevator) = disconnected_elevators.get(&initializing_elevator) {
-                                                let recovered_cab_calls = elevator.cab_calls.clone();
-                                                let bytes = bincode::serialize(&recovered_cab_calls).unwrap();
-                                                let _ = socket
-                                                        .send_to(&bytes, "255.255.255.255:30000");
+
+                                        Ok((len, _)) = socket.recv_from(&mut buf) => {
+                                            if let Ok(remote_elevator_state) =
+                                                bincode::deserialize::<ElevatorStatus>(&buf[..len])
+                                            {
+                                                if remote_elevator_state.elev_id == local_elevator_state.elev_id {
+                                                    continue;
+                                                }
+
+                                                let elev_id = remote_elevator_state.elev_id;
+
+                                                if disconnected_elevators.remove(&elev_id).is_some() {
+                                                    println!("Known elevator reconnected: {:?}", elev_id);
+                                                    let _ = tx_world_view_msg
+                                                        .send(MsgToWorldView::RemoveDisconnectedElevator(elev_id))
+                                                        .await;
+                                                } else if !known_elevators.contains_key(&elev_id) {
+                                                    println!("New elevator on network: {:?}", elev_id);
+                                                }
+
+
+
+                                                known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state.clone()));
+
+                                                let _ = tx_world_view_msg
+                                                            .send(MsgToWorldView::NewRemoteElevState(remote_elevator_state))
+                                                            .await;
+                                            }
+                                            if let Ok(initializing_elevator) =
+                                                bincode::deserialize::<NodeId>(&buf[..len])
+                                            {
+                                                if let Some(elevator) = disconnected_elevators.get(&initializing_elevator) {
+                                                    let recovered_cab_calls = elevator.cab_calls.clone();
+                                                    let bytes = bincode::serialize(&recovered_cab_calls).unwrap();
+                                                    let _ = socket
+                                                            .send_to(&bytes, "255.255.255.255:30000");
+
+                                                }
 
                                             }
 
                                         }
-
                                     }
-                                }
     }
 }
 
 fn print_state_change(old: &ElevatorStatus, new: &ElevatorStatus) {
-
     if old.behaviour != new.behaviour {
         println!("Behaviour: {:?} -> {:?}", old.behaviour, new.behaviour);
     }

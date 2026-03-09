@@ -24,7 +24,7 @@ thread::spawn(move || {
 let mut prev_buttons = vec![[false; 3]; elevator.num_floors as usize];
 let mut prev_floor: Option<u8> = None;
 // let mut prev_stop = false;
-// let mut prev_obstruction = false;
+let mut prev_obstruction = false;
 let mut seq: u64 = 0;
 
     loop {
@@ -71,12 +71,12 @@ let mut seq: u64 = 0;
         // }
 
         // --- Obstruction ---
-        // let obstruction = elevator.obstruction();
+        let obstruction = elevator.obstruction();
 
-        // if obstruction != prev_obstruction {
-        //     let _ = tx.send(DriverEvent::Obstruction(obstruction));
-        //     prev_obstruction = obstruction;
-        // }
+        if obstruction != prev_obstruction {
+            let _ = tx_fsm_msg.blocking_send(MsgToElevatorManager::Obstruction(obstruction));
+            prev_obstruction = obstruction;
+        }
 
         thread::sleep(period);
     }

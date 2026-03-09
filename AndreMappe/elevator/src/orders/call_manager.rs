@@ -27,6 +27,7 @@ pub async fn call_manager(
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
 
                 world.remove_disconnected_elevators(&elev_id);
+                world.remove_obstructed_elevators();
 
                 let active_cab_calls = world.active_cab_calls(&elev_id);
                 for call in active_cab_calls {

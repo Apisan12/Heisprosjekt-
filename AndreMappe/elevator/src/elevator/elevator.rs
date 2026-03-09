@@ -31,6 +31,7 @@ pub struct LocalElevatorStatus {
     pub floor: u8,
     pub direction: Direction,
     pub behaviour: Behaviour,
+    pub obstructed: bool,
 }
 
 impl LocalElevatorStatus {
@@ -39,6 +40,7 @@ impl LocalElevatorStatus {
             floor,
             direction,
             behaviour,
+            obstructed: false,
         }
     }
 }
@@ -49,16 +51,18 @@ struct Elevator {
     current_floor: u8,
     direction: Direction,
     calls: HashSet<Call>,
+    obstructed: bool,
 }
 
 impl Elevator {
     fn new(driver: elev::Elevator, initial_state: ElevatorState, initial_floor: u8) -> Self {
         Self {
-            driver: driver,
+            driver: driver.clone(),
             state: initial_state,
             current_floor: initial_floor,
             direction: Direction::Stop,
             calls: HashSet::new(),
+            obstructed: driver.obstruction(),
         }
     }
 
@@ -226,7 +230,7 @@ pub async fn elevator_manager(
                     elevator.send_status_update(&tx_world_manager).await;
                 }
 
-                if floor == 0 || floor == 3  {
+                if floor == 0 || floor == 3 {
                     elevator.driver.motor_direction(elev::DIRN_STOP);
                 }
             }
@@ -247,6 +251,11 @@ pub async fn elevator_manager(
                 }
             }
             MsgToElevatorManager::DoorClosed => {
+                if elevator.obstructed {
+                    elevator.open_door(tx_elevator_manager.clone());
+                    continue;
+                }
+
                 elevator.driver.door_light(false);
                 if elevator.should_serve_here() {
                     elevator.serve_current_floor(&tx_call_manager).await;
@@ -254,6 +263,15 @@ pub async fn elevator_manager(
                 } else {
                     elevator.serve_next_action();
                 }
+                elevator.send_status_update(&tx_world_manager).await;
+            }
+            MsgToElevatorManager::Obstruction(is_obstructed) => {
+                elevator.obstructed = is_obstructed;
+                println!("Is obstructed: {}", is_obstructed);
+                if is_obstructed && elevator.state == ElevatorState::DoorOpen {
+                        elevator.open_door(tx_elevator_manager.clone());
+                }
+
                 elevator.send_status_update(&tx_world_manager).await;
             }
         }

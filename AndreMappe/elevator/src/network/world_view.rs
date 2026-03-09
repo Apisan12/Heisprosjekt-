@@ -63,7 +63,6 @@ impl WorldView {
     pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
         let mut all_cab_calls = HashSet::new();
 
-
         for elevator in self.elevators.values() {
             all_cab_calls.extend(elevator.cab_calls.iter().copied());
         }
@@ -177,8 +176,19 @@ impl WorldView {
             }
         }
     }
+    pub fn remove_obstructed_elevators(&mut self) {
+        let obstructed: Vec<NodeId> = self
+            .elevators
+            .iter()
+            .filter(|(_, elev)| elev.obstructed)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for id in obstructed {
+            self.elevators.remove(&id);
+        }
+    }
 }
-    
 
 pub async fn world_manager(
     elev_id: NodeId,
@@ -196,12 +206,10 @@ pub async fn world_manager(
                 println!("Call recieved in WorldView: {}", call);
                 match call.call_type {
                     CAB => {
-                        
                         elevator.cab_calls.insert(call);
                         elevator.known_cab_calls.insert(call);
                     }
                     HALL_DOWN | HALL_UP => {
-                        
                         elevator.hall_calls.insert(call);
                     }
                     _ => {}
@@ -229,6 +237,7 @@ pub async fn world_manager(
                 elev.behaviour = local_elev.behaviour;
                 elev.floor = local_elev.floor;
                 elev.direction = local_elev.direction;
+                elev.obstructed = local_elev.obstructed;
 
                 let _ = tx_network.send(elev.clone());
             }
