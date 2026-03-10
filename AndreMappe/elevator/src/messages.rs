@@ -4,25 +4,10 @@ use std::collections::HashSet;
 use std::fmt;
 
 use crate::network::world_view::WorldView;
-use crate::elevator::elevator::LocalElevatorStatus;
+use crate::elevator::elevator::{LocalElevatorStatus, Direction, Behaviour};
 
 pub type NodeId = [u8; 6]; // MAC-sized identity
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Behaviour {
-    Idle,
-    Moving,
-    DoorOpen,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Direction {
-    Up,
-    Down,
-    Stop,
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ElevatorStatus {
@@ -34,7 +19,6 @@ pub struct ElevatorStatus {
     pub hall_calls: HashSet<Call>,
     pub finished_hall_calls: HashSet<Call>,
     pub known_cab_calls: HashSet<Call>,
-    pub disconnected_elevators: HashSet<NodeId>,
     pub is_obstructed: bool,
 }
 
@@ -49,7 +33,6 @@ impl ElevatorStatus {
             hall_calls: HashSet::new(),
             finished_hall_calls: HashSet::new(),
             known_cab_calls: HashSet::new(),
-            disconnected_elevators: HashSet::new(),
             is_obstructed: false,
         }
     }
@@ -131,10 +114,10 @@ pub enum MsgToCallManager {
 }
 
 #[derive(Debug)]
-pub enum MsgToWorldView {
+pub enum MsgToWorldManager {
     AddCall(Call),
     ServedCall(Call),
-    UpdateLocalElevStatus(LocalElevatorStatus),
+    NewLocalElevStatus(LocalElevatorStatus),
     NewRemoteElevState(ElevatorStatus),
     AddDisconnectedElevator(NodeId),
     RemoveDisconnectedElevator(NodeId),

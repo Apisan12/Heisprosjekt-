@@ -1,10 +1,10 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use crate::messages::{Behaviour, Call, Direction, ElevatorStatus, NodeId};
+use crate::messages::{Call, ElevatorStatus, NodeId};
 use crate::network::world_view::WorldView;
 use crate::config::ELEV_NUM_FLOORS;
-
+use crate::elevator::elevator::{Behaviour, Direction};
 
 // The naming in AssignerInput corresponds to the naming that is expected
 // by the hall_request_assigner.exe script.
@@ -55,8 +55,7 @@ pub fn run_assigner(
     active_calls: &HashSet<Call>,
     elev_id: NodeId,
 ) -> HashSet<Call> {
-    world.remove_disconnected_elevators(&elev_id);
-                world.remove_obstructed_elevators();
+    world.remove_obstructed_elevators();
 
     let input = build_assigner_input(&world, &active_calls);
 

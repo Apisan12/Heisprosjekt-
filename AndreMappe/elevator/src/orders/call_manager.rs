@@ -1,6 +1,6 @@
 use crate::{
     orders::assigner,
-    messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldView, NodeId},
+    messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, NodeId},
 };
 use driver_rust::elevio::{
     elev::{Elevator, CAB, HALL_DOWN, HALL_UP},
@@ -13,7 +13,7 @@ pub async fn call_manager(
     // Takes in driver to handle the lights
     driver: Elevator,
     mut rx_manager_msg: mpsc::Receiver<MsgToCallManager>,
-    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
+    tx_world_view_msg: mpsc::Sender<MsgToWorldManager>,
     tx_fsm_msg: mpsc::Sender<MsgToElevatorManager>,
 ) {
     // Used to store previous active hall calls to determine what lights
@@ -62,12 +62,12 @@ pub async fn call_manager(
                     CAB => {
                         driver.call_button_light(call.floor, call.call_type, false);
                         let _ = tx_world_view_msg
-                            .send(MsgToWorldView::ServedCall(call.clone()))
+                            .send(MsgToWorldManager::ServedCall(call.clone()))
                             .await;
                     }
                     HALL_DOWN | HALL_UP => {
                         let _ = tx_world_view_msg
-                            .send(MsgToWorldView::ServedCall(call.clone()))
+                            .send(MsgToWorldManager::ServedCall(call.clone()))
                             .await;
                     }
                     other => {

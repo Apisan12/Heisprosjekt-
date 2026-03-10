@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
 use crate::elevator;
-use crate::messages::{Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWorldView, NodeId};
+use crate::messages::{Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevators: HashMap<NodeId, ElevatorStatus>,
@@ -177,16 +177,6 @@ impl WorldView {
             }
         }
     }
-    pub fn remove_disconnected_elevators(&mut self, elev_id: &NodeId) {
-        if let Some(local_elev) = self.elevators.get(elev_id) {
-            let disconnected: Vec<NodeId> =
-                local_elev.disconnected_elevators.iter().cloned().collect();
-
-            for id in disconnected {
-                self.elevators.remove(&id);
-            }
-        }
-    }
     pub fn remove_obstructed_elevators(&mut self) {
         let obstructed: Vec<NodeId> = self
             .elevators
@@ -204,7 +194,7 @@ impl WorldView {
 pub async fn world_manager(
     elev_id: NodeId,
     initial_elev_status: ElevatorStatus,
-    mut rx_world_view_msg: mpsc::Receiver<MsgToWorldView>,
+    mut rx_world_view_msg: mpsc::Receiver<MsgToWorldManager>,
     tx_manager_msg: mpsc::Sender<MsgToCallManager>,
     tx_network: watch::Sender<ElevatorStatus>,
 ) {
@@ -212,7 +202,7 @@ pub async fn world_manager(
 
     while let Some(msg) = rx_world_view_msg.recv().await {
         match msg {
-            MsgToWorldView::AddCall(call) => {
+            MsgToWorldManager::AddCall(call) => {
                 {
                     println!("Call recieved in WorldView: {}", call);
                     let elevator = world.local_elev_mut(&elev_id);
@@ -233,7 +223,7 @@ pub async fn world_manager(
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
-            MsgToWorldView::ServedCall(call) => {
+            MsgToWorldManager::ServedCall(call) => {
                 {
                     let elevator = world.local_elev_mut(&elev_id);
                     match call.call_type {
@@ -252,7 +242,7 @@ pub async fn world_manager(
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
-            MsgToWorldView::UpdateLocalElevStatus(local_elev) => {
+            MsgToWorldManager::NewLocalElevStatus(local_elev) => {
                 // update behaviour, floor, direction in worldview for this elevators id
                 let elev = world.local_elev_mut(&elev_id);
                 elev.behaviour = local_elev.behaviour;
@@ -262,7 +252,7 @@ pub async fn world_manager(
 
                 let _ = tx_network.send(elev.clone());
             }
-            MsgToWorldView::NewRemoteElevState(remote_elev) => {
+            MsgToWorldManager::NewRemoteElevState(remote_elev) => {
                 // Add the updated elevator state to the world
                 world.elevators.insert(remote_elev.elev_id, remote_elev);
                 world.merge_hall_calls(&elev_id);
@@ -277,14 +267,14 @@ pub async fn world_manager(
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
-            MsgToWorldView::AddDisconnectedElevator(remote_elev_id) => {
+            MsgToWorldManager::AddDisconnectedElevator(remote_elev_id) => {
                 world.disconnected_elevators.insert(remote_elev_id);
 
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
-            MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
+            MsgToWorldManager::RemoveDisconnectedElevator(remote_elev_id) => {
                 world.disconnected_elevators.insert(remote_elev_id);
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))

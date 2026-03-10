@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use driver_rust::elevio::elev::Elevator;
 
-use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldView, NodeId};
+use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldManager, NodeId};
 
 /// Spawns the hardware polling thread.
 ///
@@ -15,7 +15,7 @@ use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldView, NodeId
 pub fn spawn_input_thread(
 elev_id: NodeId,
 elevator: Elevator,
-tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
+tx_world_view_msg: mpsc::Sender<MsgToWorldManager>,
 tx_fsm_msg: mpsc::Sender<MsgToElevatorManager>,
 period: Duration,
 ) {
@@ -44,7 +44,7 @@ let mut seq: u64 = 0;
                         floor: floor,
                         call_type: call,
                     };
-                    let _ = tx_world_view_msg.blocking_send(MsgToWorldView::AddCall(call));
+                    let _ = tx_world_view_msg.blocking_send(MsgToWorldManager::AddCall(call));
                     println!("Call sent to WorldView: {}", call)
                 }
 

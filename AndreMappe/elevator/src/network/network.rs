@@ -1,5 +1,5 @@
 use crate::config::NETWORK_PORT;
-use crate::messages::{Call, CallList, ElevatorStatus, MsgToWorldView, NodeId};
+use crate::messages::{Call, CallList, ElevatorStatus, MsgToWorldManager, NodeId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
 use std::io::Bytes;
@@ -168,7 +168,7 @@ pub fn create_socket(port: u16) -> Arc<UdpSocket> {
 
 pub async fn network_manager(
     mut rx_network: watch::Receiver<ElevatorStatus>,
-    tx_world_view_msg: mpsc::Sender<MsgToWorldView>,
+    tx_world_view_msg: mpsc::Sender<MsgToWorldManager>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(500));
     let mut buf = [0u8; 4096];
@@ -209,7 +209,7 @@ _ = tick.tick() => {
 
     for elev_id in disconnected {
         let _ = tx_world_view_msg
-            .send(MsgToWorldView::AddDisconnectedElevator(elev_id))
+            .send(MsgToWorldManager::AddDisconnectedElevator(elev_id))
             .await;
     }
 
@@ -233,7 +233,7 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
         if disconnected_elevators.remove(&elev_id).is_some() {
             println!("Known elevator reconnected: {:?}", elev_id);
             let _ = tx_world_view_msg
-                .send(MsgToWorldView::RemoveDisconnectedElevator(elev_id))
+                .send(MsgToWorldManager::RemoveDisconnectedElevator(elev_id))
                 .await;
         } else if !known_elevators.contains_key(&elev_id) {
             println!("New elevator on network: {:?}", elev_id);
@@ -244,7 +244,7 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
         known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state.clone()));
 
         let _ = tx_world_view_msg
-                    .send(MsgToWorldView::NewRemoteElevState(remote_elevator_state))
+                    .send(MsgToWorldManager::NewRemoteElevState(remote_elevator_state))
                     .await;
     }
     if let Ok(initializing_elevator) =
