@@ -169,6 +169,7 @@ impl Elevator {
     fn open_door(&mut self, tx: mpsc::Sender<MsgToElevatorManager>) {
         self.driver.door_light(true);
         self.state = ElevatorState::DoorOpen;
+        self.direction = Direction::Stop;
 
         tokio::spawn(async move {
             sleep(Duration::from_secs(3)).await;
@@ -221,6 +222,12 @@ pub async fn elevator_manager(
                 println!("AtFloor: {}", floor);
                 elevator.current_floor = floor;
                 elevator.driver.floor_indicator(floor);
+
+                if elevator.calls.is_empty() {
+                    elevator.driver.motor_direction(elev::DIRN_STOP);
+                    elevator.state = ElevatorState::Idle;
+                    elevator.direction = Direction::Stop;
+                }
 
                 if elevator.state == ElevatorState::Moving && elevator.should_serve_here() {
                     elevator.driver.motor_direction(elev::DIRN_STOP);
