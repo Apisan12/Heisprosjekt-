@@ -24,9 +24,11 @@ impl WorldView {
     }
 
     /// Creates an iterator for the elevs.
-    pub fn elevs(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
-        self.elevators.iter()
-    }
+pub fn elevs(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+    self.elevators
+        .iter()
+        .filter(move |(id, _)| !self.disconnected_elevators.contains(*id))
+}
 
     /// Gets the mutable local elev state
     pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
