@@ -2,7 +2,6 @@ use crate::config::NETWORK_PORT;
 use crate::messages::{Call, CallList, ElevatorStatus, MsgToWorldManager, NodeId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
-use std::io::Bytes;
 use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
 use std::sync::Arc;
 use std::time::Duration;

@@ -5,7 +5,9 @@ use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
 use crate::elevator;
-use crate::messages::{Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId};
+use crate::messages::{
+    Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId,
+};
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevators: HashMap<NodeId, ElevatorStatus>,
@@ -25,8 +27,7 @@ impl WorldView {
 
     /// Creates an iterator for the connected elevators.
     pub fn elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
-        self.elevators
-            .iter()
+        self.elevators.iter()
     }
 
     /// Creates an iterator for the connected elevators.

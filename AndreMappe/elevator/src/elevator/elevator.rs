@@ -27,11 +27,38 @@ use std::collections::HashSet;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 
+
+/// External representation of the elevator behaviour.
+/// 
+/// This enum is used when reporting the elevator state to the 
+/// `world_manager`. It is a simplified representation of
+/// [`ElevatorState`] that only exposes the behaviour relevant
+/// for the other system components.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Behaviour {
+    Idle,
+    Moving,
+    DoorOpen,
+}
+
+/// Direction of travel for the elevator.
+/// 
+/// This is used both internally by the elevator manager and when
+/// reporting the elevator state to the `world_manager`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Direction {
+    Up,
+    Down,
+    Stop,
+}
+
 /// Internal state of the elevator
 ///
-/// This represent the physical state of the elevator.
+/// Represent the physical state of the elevator.
 #[derive(PartialEq, Eq)]
-pub enum ElevatorState {
+enum ElevatorState {
     /// Elevator is stationary and waiting for calls.
     Idle,
 
@@ -43,22 +70,6 @@ pub enum ElevatorState {
 
     /// When the elevator has stopped because of the stop button. (NOT IMPLEMENTED)
     _Stopped,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Behaviour {
-    Idle,
-    Moving,
-    DoorOpen,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Direction {
-    Up,
-    Down,
-    Stop,
 }
 
 impl ElevatorState {
@@ -75,9 +86,9 @@ impl ElevatorState {
 
 /// Status information about the local elevator.
 ///
-/// This struct is sent to the `world_manager` every time there is a change
-/// in one of the fields. This is to make sure everything using the
-///  `WorldView` to do decisions has an up-to-date view.
+/// This struct is sent to the `world_manager` whenever the
+/// local elevator state changes. This is to make sure everything
+/// making decisions has an up-to-date view.
 #[derive(Debug, Clone)]
 pub struct LocalElevatorStatus {
     pub floor: u8,
@@ -100,8 +111,6 @@ impl LocalElevatorStatus {
 }
 
 /// Internal representation of the elevator.
-///
-/// This struct encapsulates the elevator.
 struct Elevator {
     /// Hardware driver for interacting with the elevator output:
     /// - Motor direction
@@ -123,10 +132,10 @@ impl Elevator {
     /// Creates a new elevator instance
     ///
     /// The initial state and floor are determined during system startup.
-    fn new(driver: elev::Elevator, initial_state: ElevatorState, initial_floor: u8) -> Self {
+    fn new(driver: elev::Elevator, initial_floor: u8) -> Self {
         Self {
             driver: driver.clone(),
-            state: initial_state,
+            state: ElevatorState::Idle,
             current_floor: initial_floor,
             direction: Direction::Stop,
             calls: HashSet::new(),
@@ -134,31 +143,61 @@ impl Elevator {
         }
     }
 
+    /// Stops the elevator motor and resets the movement state.
+    /// 
+    /// This function updates both the motor direction and the
+    /// internal state machine to reflect that the elevator is idle.
     fn stop(&mut self) {
         self.driver.motor_direction(elev::DIRN_STOP);
         self.state = ElevatorState::Idle;
         self.direction = Direction::Stop;
     }
-    /// Returns true if there are calls above the current floor.
-    fn has_calls_above(&self) -> bool {
-        self.calls
-            .iter()
-            .any(|call| call.floor > self.current_floor)
-    }
-    /// Returns true if there are calls below the current floor.
-    fn has_calls_below(&self) -> bool {
-        self.calls
-            .iter()
-            .any(|call| call.floor < self.current_floor)
+
+    /// Determines and executes the next movement action.
+    ///
+    /// Based on the currently assigned calls, this function decides
+    /// whether the elevator should move up, move down or remain idle.
+    /// The motor direction and internal state machine are updated
+    /// accordingly.
+    fn serve_next_action(&mut self) {
+        self.direction = self.next_direction();
+
+        match self.direction {
+            Direction::Up => {
+                self.driver.motor_direction(elev::DIRN_UP);
+                self.state = ElevatorState::Moving;
+            }
+            Direction::Down => {
+                self.driver.motor_direction(elev::DIRN_DOWN);
+                self.state = ElevatorState::Moving;
+            }
+            Direction::Stop => {
+                self.state = ElevatorState::Idle;
+            }
+        }
     }
 
-    /// Determines the next direction the elevator should move.
+    /// Serves calls at the current floor.
+    /// 
+    /// The calls that are served are removed from the elevator's
+    /// internal call set and reported to the call manager so the
+    /// global system state can be updated.
+    async fn serve_current_floor(&mut self, tx_call_manager: &mpsc::Sender<MsgToCallManager>) {
+        let served = self.served_calls();
+
+        for call in served {
+            self.calls.remove(&call);
+            let _ = tx_call_manager
+                .send(MsgToCallManager::ServedCall(call))
+                .await;
+        }
+    }
+
+    /// Determines the next direction using a SCAN-like scheduling strategy.
     ///
-    /// The algorithm prioritizes continuing in the current direction
-    /// if there are remaining calls ahead.
-    ///
-    /// If no calls remain in that direction, the elevator reverses
-    /// direction or stops if no more calls exist.
+    /// The elevator continues in its current direction while there
+    /// are remaining calls ahead. If no calls remain in that direction,
+    /// the elevator reverses direction or stops if no calls exist.
     fn next_direction(&self) -> Direction {
         if self.direction != Direction::Down && self.has_calls_above() {
             Direction::Up
@@ -169,9 +208,15 @@ impl Elevator {
         }
     }
 
-    /// Determines which direction should be served at the current floor
+    /// Determines the direction that should be served at the current floor.
     ///
-    /// This is used when deciding whether hall calls should be served.
+    /// This is used when deciding whether hall calls should be served
+    /// while the elevator is stopping at a floor.
+    /// 
+    /// If the elevator still has calls ahead in its current travel
+    /// direction, that direction is preferred. Otherwise the function
+    /// checks if there are hall calls at the current floor and returns
+    /// their direction.
     fn service_direction(&self) -> Direction {
         if self.direction == Direction::Up && self.has_calls_above() {
             return Direction::Up;
@@ -231,9 +276,7 @@ impl Elevator {
 
     /// Returns the set of calls that will be served at the current floor.
     ///
-    /// Rules:
-    /// - Cab calls are always served.
-    /// - Hall calls are served only if they match the service direction.
+    /// Uses the same rules as [`should_serve_here`].
     fn served_calls(&self) -> HashSet<Call> {
         let service_direction = self.service_direction();
 
@@ -255,25 +298,22 @@ impl Elevator {
             .collect()
     }
 
-    /// Serves calls at the current floor
-    /// This removes the served calls from this elevator,
-    /// and notifies the call manager that the call is served.
-    ///
-    /// Takes in the call manager channel as parameter.
-    async fn serve_current_floor(&mut self, tx_call_manager: &mpsc::Sender<MsgToCallManager>) {
-        let served = self.served_calls();
-
-        for call in served {
-            self.calls.remove(&call);
-            let _ = tx_call_manager
-                .send(MsgToCallManager::ServedCall(call))
-                .await;
-        }
+    /// Returns true if there are calls above the current floor.
+    fn has_calls_above(&self) -> bool {
+        self.calls
+            .iter()
+            .any(|call| call.floor > self.current_floor)
+    }
+    /// Returns true if there are calls below the current floor.
+    fn has_calls_below(&self) -> bool {
+        self.calls
+            .iter()
+            .any(|call| call.floor < self.current_floor)
     }
 
     /// Opens the elevator door and starts the door timer.
     ///
-    /// The door remains open for 3 second before a
+    /// The door remains open for 3 seconds before a
     /// `DoorClosed` message is sent.
     ///
     /// Takes in the elevator manager channel as parameter.
@@ -290,33 +330,10 @@ impl Elevator {
         });
     }
 
-    /// Determines and executes the next movement action.
-    ///
-    /// The elevator will either:
-    /// - Move up
-    /// - Move down
-    /// - Remain idle
-    fn serve_next_action(&mut self) {
-        self.direction = self.next_direction();
-
-        match self.direction {
-            Direction::Up => {
-                self.driver.motor_direction(elev::DIRN_UP);
-                self.state = ElevatorState::Moving;
-            }
-            Direction::Down => {
-                self.driver.motor_direction(elev::DIRN_DOWN);
-                self.state = ElevatorState::Moving;
-            }
-            Direction::Stop => {
-                self.state = ElevatorState::Idle;
-            }
-        }
-    }
-
     /// Sends the current elevator status to the `WorldView`.
     ///
-    /// Takes in the world manager channel as parameter.
+    /// This keeps the distributed system synchronized with the
+    /// latest state of the local elevator.
     async fn send_new_status(&self, tx_world_manager: &mpsc::Sender<MsgToWorldManager>) {
         let status = LocalElevatorStatus::new(
             self.current_floor,
@@ -340,20 +357,20 @@ impl Elevator {
 /// # Message Types
 ///
 /// - `AtFloor`
-/// Triggered by the floor sensor when the elevator reaches a floor.
-/// Received from the input thread.
+///   Triggered by the floor sensor when the elevator reaches a floor.
+///   Received from the input thread.
 ///
 /// - `ActiveCalls`
-/// Updated list of calls assigned to this elevator.
-/// Received from the call manager.
+///   Updated list of calls assigned to this elevator.
+///   Received from the call manager.
 ///
 /// - `DoorClosed`
-/// Triggered after the door timer expires
-/// Generated internally by the elevator manager.
+///   Triggered after the door timer expires
+///   Generated internally by the elevator manager.
 ///
 /// - `Obstruction`
-/// Triggered when the obstruction sensor changes state.
-/// Received from the input thread.
+///   Triggered when the obstruction sensor changes state.
+///   Received from the input thread.
 ///
 /// The manager sends messages to:
 ///
@@ -362,14 +379,13 @@ impl Elevator {
 /// - `driver` - Controls motor, door light and floor indicator.
 pub async fn elevator_manager(
     driver: elev::Elevator,
-    initial_state: ElevatorState,
     initial_floor: u8,
     mut rx_elevator_manager: mpsc::Receiver<MsgToElevatorManager>,
     tx_call_manager: mpsc::Sender<MsgToCallManager>,
     tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
     tx_world_manager: mpsc::Sender<MsgToWorldManager>,
 ) {
-    let mut elevator = Elevator::new(driver.clone(), initial_state, initial_floor);
+    let mut elevator = Elevator::new(driver.clone(), initial_floor);
 
     while let Some(msg) = rx_elevator_manager.recv().await {
         match msg {
@@ -380,12 +396,12 @@ pub async fn elevator_manager(
                 elevator.driver.floor_indicator(floor);
 
                 // Stops the elevator at a floor if it has been unassigned a call it was going towards.
+                // This can happen if a new elevator joins the network that is closer to the call.
                 if elevator.calls.is_empty() {
                     elevator.stop();
                 }
 
-                // Stops if it has calls to serve at this floor.
-                if elevator.should_serve_here() {
+                else if elevator.should_serve_here() {
                     elevator.stop();
                     elevator.serve_current_floor(&tx_call_manager).await;
                     elevator.open_door(tx_elevator_manager.clone());
@@ -394,7 +410,7 @@ pub async fn elevator_manager(
                 // Stops the elevator at the bottom or top floor, used as a defensive
                 // mechanism since there is no circumstance the elevator should move
                 // past these floors.
-                if floor == BOTTOM_FLOOR || floor == TOP_FLOOR {
+                else if floor == BOTTOM_FLOOR || floor == TOP_FLOOR {
                     elevator.stop();
                 }
 
