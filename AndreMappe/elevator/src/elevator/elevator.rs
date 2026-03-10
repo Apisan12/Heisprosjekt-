@@ -169,7 +169,7 @@ impl Elevator {
     fn open_door(&mut self, tx: mpsc::Sender<MsgToElevatorManager>) {
         self.driver.door_light(true);
         self.state = ElevatorState::DoorOpen;
-        self.direction = Direction::Stop;
+        // self.direction = Direction::Stop;
 
         tokio::spawn(async move {
             sleep(Duration::from_secs(3)).await;
