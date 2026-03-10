@@ -169,7 +169,7 @@ impl Elevator {
     fn open_door(&mut self, tx: mpsc::Sender<MsgToElevatorManager>) {
         self.driver.door_light(true);
         self.state = ElevatorState::DoorOpen;
-        // self.direction = Direction::Stop;
+        self.direction = Direction::Stop;
 
         tokio::spawn(async move {
             sleep(Duration::from_secs(3)).await;
@@ -262,6 +262,7 @@ pub async fn elevator_manager(
                 }
             }
             MsgToElevatorManager::DoorClosed => {
+                elevator.send_status_update(&tx_world_manager).await;
                 if elevator.is_obstructed {
                     elevator.open_door(tx_elevator_manager.clone());
                     continue;

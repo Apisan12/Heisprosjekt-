@@ -9,6 +9,7 @@ use crate::messages::{Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWor
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
     elevators: HashMap<NodeId, ElevatorStatus>,
+    disconnected_elevators: HashSet<NodeId>,
 }
 
 impl WorldView {
@@ -16,7 +17,10 @@ impl WorldView {
         let mut elevators = HashMap::new();
         elevators.insert(initial_status.elev_id, initial_status);
 
-        Self { elevators }
+        Self {
+            elevators,
+            disconnected_elevators: HashSet::new(),
+        }
     }
 
     /// Creates an iterator for the elevs.
@@ -54,11 +58,11 @@ impl WorldView {
                 }
             }
             for call in &all_finished_calls {
-            // Only merge finished calls that still correspond to an active hall call
-            if all_hall_calls.contains(call) {
-                elevator.finished_hall_calls.insert(*call);
+                // Only merge finished calls that still correspond to an active hall call
+                if all_hall_calls.contains(call) {
+                    elevator.finished_hall_calls.insert(*call);
+                }
             }
-        }
         }
     }
 
@@ -78,19 +82,24 @@ impl WorldView {
     /// Checks the worldview for calls that are know on all connected elevators, these are active
     /// returns these active calls
     pub fn active_hall_calls(&self) -> HashSet<Call> {
+        let connected = self
+            .elevators
+            .iter()
+            .filter(|(id, _)| !self.disconnected_elevators.contains(*id));
+
         let mut finished = HashSet::new();
 
-        for elev in self.elevators.values() {
+        for (_, elev) in connected.clone() {
             finished.extend(elev.finished_hall_calls.iter().copied());
         }
 
-        let mut active = if let Some(first) = self.elevators.values().next() {
+        let mut active = if let Some((_, first)) = connected.clone().next() {
             first.hall_calls.clone()
         } else {
             return HashSet::new();
         };
 
-        for elev in self.elevators.values() {
+        for (_, elev) in connected {
             active.retain(|call| elev.hall_calls.contains(call));
         }
 
@@ -106,18 +115,24 @@ impl WorldView {
             .elevators
             .get(elev_id)
             .expect("Elevator not in worldview");
+
         let mut active: HashSet<Call> = elevator.cab_calls.iter().copied().collect();
 
-        // If the elevator is alone in the worldview
-        if self.elevators.keys().all(|id| id == elev_id) {
+        // Check if there are any other connected elevators
+        let others_connected = self
+            .elevators
+            .iter()
+            .any(|(id, _)| id != elev_id && !self.disconnected_elevators.contains(id));
+
+        if !others_connected {
             return active;
         }
 
-        // Only keep cab calls known by other elevators as active
+        // Only keep cab calls acknowledged by other connected elevators
         active.retain(|call| {
             self.elevators
                 .iter()
-                .filter(|(id, _)| *id != elev_id)
+                .filter(|(id, _)| *id != elev_id && !self.disconnected_elevators.contains(*id))
                 .all(|(_, other)| other.known_cab_calls.contains(call))
         });
 
@@ -138,41 +153,42 @@ impl WorldView {
     /// Removes hall calls when they are seen as finished on every elevator
     /// Remvoes from finished when the call is not in hall calls on any of the elevators
     /// This is a two step propagation to ensure safe removing of hall calls
-pub fn cleanup_hall_calls(&mut self, elev_id: &NodeId) {
-    let mut finished_by_all: HashSet<Call> = self
-        .elevators
-        .values()
-        .flat_map(|e| e.finished_hall_calls.iter().copied())
-        .collect();
-
-    finished_by_all.retain(|call| {
-        self.elevators
+    pub fn cleanup_hall_calls(&mut self, elev_id: &NodeId) {
+        let mut finished_by_all: HashSet<Call> = self
+            .elevators
             .values()
-            .any(|elevator| elevator.finished_hall_calls.contains(call))
-    });
+            .flat_map(|e| e.finished_hall_calls.iter().copied())
+            .collect();
 
-    // Remove only from the local elevator
-    if let Some(local) = self.elevators.get_mut(elev_id) {
-        for call in &finished_by_all {
-            local.hall_calls.remove(call);
-        }
-    }
-
-    let removable: HashSet<Call> = finished_by_all
-        .into_iter()
-        .filter(|call| {
-            !self.elevators
+        finished_by_all.retain(|call| {
+            self.elevators
                 .values()
-                .any(|elevator| elevator.hall_calls.contains(call))
-        })
-        .collect();
+                .any(|elevator| elevator.finished_hall_calls.contains(call))
+        });
 
-    for elevator in self.elevators.values_mut() {
-        for call in &removable {
-            elevator.finished_hall_calls.remove(call);
+        // Remove only from the local elevator
+        if let Some(local) = self.elevators.get_mut(elev_id) {
+            for call in &finished_by_all {
+                local.hall_calls.remove(call);
+            }
+        }
+
+        let removable: HashSet<Call> = finished_by_all
+            .into_iter()
+            .filter(|call| {
+                !self
+                    .elevators
+                    .values()
+                    .any(|elevator| elevator.hall_calls.contains(call))
+            })
+            .collect();
+
+        for elevator in self.elevators.values_mut() {
+            for call in &removable {
+                elevator.finished_hall_calls.remove(call);
+            }
         }
     }
-}
     pub fn remove_disconnected_elevators(&mut self, elev_id: &NodeId) {
         if let Some(local_elev) = self.elevators.get(elev_id) {
             let disconnected: Vec<NodeId> =
@@ -230,6 +246,7 @@ pub async fn world_manager(
                     .await;
             }
             MsgToWorldView::ServedCall(call) => {
+                {
                 let elevator = world.local_elev_mut(&elev_id);
                 match call.call_type {
                     CAB => {
@@ -241,8 +258,13 @@ pub async fn world_manager(
                     }
                     _ => {}
                 }
-
                 let _ = tx_network.send(elevator.clone());
+            }
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+
+                
             }
             MsgToWorldView::UpdateLocalElevStatus(local_elev) => {
                 // update behaviour, floor, direction in worldview for this elevators id
@@ -259,7 +281,7 @@ pub async fn world_manager(
                 world.elevators.insert(remote_elev.elev_id, remote_elev);
                 world.merge_hall_calls(&elev_id);
                 world.cleanup_hall_calls(&elev_id);
-                
+
                 world.acknowledge_cab_calls(&elev_id);
                 let elev = world.local_elev(&elev_id);
                 let _ = tx_network.send(elev.clone());
@@ -270,16 +292,14 @@ pub async fn world_manager(
                     .await;
             }
             MsgToWorldView::AddDisconnectedElevator(remote_elev_id) => {
-                let elevator = world.local_elev_mut(&elev_id);
-                elevator.disconnected_elevators.insert(remote_elev_id);
+                world.disconnected_elevators.insert(remote_elev_id);
 
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
             MsgToWorldView::RemoveDisconnectedElevator(remote_elev_id) => {
-                let elevator = world.local_elev_mut(&elev_id);
-                elevator.disconnected_elevators.remove(&remote_elev_id);
+                world.disconnected_elevators.insert(remote_elev_id);
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
