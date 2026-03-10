@@ -18,7 +18,7 @@
 //! - `driver` – controls the button lights
 
 use crate::{
-    orders::assigner,
+    calls::assigner,
     messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, NodeId},
 };
 use driver_rust::elevio::{
