@@ -23,7 +23,13 @@ impl WorldView {
         }
     }
 
-    /// Creates an iterator for the elevs.
+    /// Creates an iterator for the connected elevators.
+    pub fn elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+        self.elevators
+            .iter()
+    }
+
+    /// Creates an iterator for the connected elevators.
     pub fn connected_elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
         self.elevators
             .iter()
@@ -72,7 +78,7 @@ impl WorldView {
     pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
         let mut all_cab_calls = HashSet::new();
 
-        for (_, elevator) in self.connected_elevators() {
+        for (_, elevator) in self.elevators() {
             all_cab_calls.extend(elevator.cab_calls.iter().copied());
         }
 
@@ -275,7 +281,7 @@ pub async fn world_manager(
                     .await;
             }
             MsgToWorldManager::RemoveDisconnectedElevator(remote_elev_id) => {
-                world.disconnected_elevators.insert(remote_elev_id);
+                world.disconnected_elevators.remove(&remote_elev_id);
                 let _ = tx_manager_msg
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;

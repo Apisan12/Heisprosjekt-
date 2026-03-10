@@ -3,7 +3,7 @@
 //! This module implements the **local elevator manager**.
 //!
 //! The manager maintains the elevator state machine and reacts to
-//! events received from other components through message channels.
+//! messages received from other components through tokio channels.
 //!
 //! Responsibilities:
 //! - Track elevator state and position
@@ -17,7 +17,7 @@
 //!
 //! - `call_manager` – reports when calls have been served
 //! - `world_manager` – sends updates about elevator state
-//! - `Elevator driver` – hardware interface for motor, doors, and sensors
+//! - `driver` – hardware interface for motor, doors, and sensors
 
 use crate::config::{BOTTOM_FLOOR, TOP_FLOOR};
 use crate::messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager};
@@ -75,9 +75,9 @@ impl ElevatorState {
 
 /// Status information about the local elevator.
 ///
-/// This struct is sent to the `WorldView` every time there is a change
+/// This struct is sent to the `world_manager` every time there is a change
 /// in one of the fields. This is to make sure everything using the
-///  `WorldView` to do decisions has the current status.
+///  `WorldView` to do decisions has an up-to-date view.
 #[derive(Debug, Clone)]
 pub struct LocalElevatorStatus {
     pub floor: u8,
@@ -132,6 +132,12 @@ impl Elevator {
             calls: HashSet::new(),
             is_obstructed: driver.obstruction(),
         }
+    }
+
+    fn stop(&mut self) {
+        self.driver.motor_direction(elev::DIRN_STOP);
+        self.state = ElevatorState::Idle;
+        self.direction = Direction::Stop;
     }
     /// Returns true if there are calls above the current floor.
     fn has_calls_above(&self) -> bool {
@@ -333,27 +339,27 @@ impl Elevator {
 ///
 /// # Message Types
 ///
-/// `AtFloor`
-/// : Triggered by the floor sensor when the elevator reaches a floor.
+/// - `AtFloor`
+/// Triggered by the floor sensor when the elevator reaches a floor.
 /// Received from the input thread.
 ///
-/// `ActiveCalls`
-/// : Updated list of calls assigned to this elevator.
+/// - `ActiveCalls`
+/// Updated list of calls assigned to this elevator.
 /// Received from the call manager.
 ///
-/// `DoorClosed`
-/// : Triggered after the door timer expires
-/// Received from the elevator manager.
+/// - `DoorClosed`
+/// Triggered after the door timer expires
+/// Generated internally by the elevator manager.
 ///
-/// `Obstruction`
-/// : Triggered when the obstruction sensor changes state.
+/// - `Obstruction`
+/// Triggered when the obstruction sensor changes state.
 /// Received from the input thread.
 ///
 /// The manager sends messages to:
 ///
-/// - `CallManager` - Sends served calls.
-/// - `WorldView` - Sends new elevator statuses.
-/// - `Driver` - Controls motor, door light and floor indicator.
+/// - `call_manager` - Sends served calls.
+/// - `world_manager` - Sends new elevator statuses.
+/// - `driver` - Controls motor, door light and floor indicator.
 pub async fn elevator_manager(
     driver: elev::Elevator,
     initial_state: ElevatorState,
@@ -367,6 +373,7 @@ pub async fn elevator_manager(
 
     while let Some(msg) = rx_elevator_manager.recv().await {
         match msg {
+            // Triggered when the floor sensor detects a new floor.
             MsgToElevatorManager::AtFloor(floor) => {
                 println!("At floor: {}", floor);
                 elevator.current_floor = floor;
@@ -374,14 +381,12 @@ pub async fn elevator_manager(
 
                 // Stops the elevator at a floor if it has been unassigned a call it was going towards.
                 if elevator.calls.is_empty() {
-                    elevator.driver.motor_direction(elev::DIRN_STOP);
-                    elevator.state = ElevatorState::Idle;
-                    elevator.direction = Direction::Stop;
+                    elevator.stop();
                 }
 
-                // Stops if it has calls to server at this floor.
+                // Stops if it has calls to serve at this floor.
                 if elevator.should_serve_here() {
-                    elevator.driver.motor_direction(elev::DIRN_STOP);
+                    elevator.stop();
                     elevator.serve_current_floor(&tx_call_manager).await;
                     elevator.open_door(tx_elevator_manager.clone());
                 }
@@ -390,13 +395,12 @@ pub async fn elevator_manager(
                 // mechanism since there is no circumstance the elevator should move
                 // past these floors.
                 if floor == BOTTOM_FLOOR || floor == TOP_FLOOR {
-                    elevator.driver.motor_direction(elev::DIRN_STOP);
-                    elevator.state = ElevatorState::Idle;
-                    elevator.direction = Direction::Stop;
+                    elevator.stop();
                 }
 
                 elevator.send_new_status(&tx_world_manager).await;
             }
+            // Updated call assignments from the call manager.
             MsgToElevatorManager::ActiveCalls(calls) => {
                 elevator.calls = calls;
 
@@ -404,9 +408,10 @@ pub async fn elevator_manager(
                     continue;
                 }
 
-                // If the elevator is Idle, check if there is new calls to serve
                 if elevator.state == ElevatorState::Idle {
                     if elevator.should_serve_here() {
+                        // Determines the next direction before opening the door so
+                        // hall calls are served according to the intended travel direction.
                         elevator.direction = elevator.next_direction();
                         elevator.serve_current_floor(&tx_call_manager).await;
                         elevator.open_door(tx_elevator_manager.clone());
@@ -416,6 +421,7 @@ pub async fn elevator_manager(
                     elevator.send_new_status(&tx_world_manager).await;
                 }
             }
+            // Door timer expired.
             MsgToElevatorManager::DoorClosed => {
                 if elevator.is_obstructed {
                     elevator.open_door(tx_elevator_manager.clone());
@@ -431,6 +437,8 @@ pub async fn elevator_manager(
                 }
                 elevator.send_new_status(&tx_world_manager).await;
             }
+
+            // Obstruction sensor changed state.
             MsgToElevatorManager::Obstruction(is_obstructed) => {
                 elevator.is_obstructed = is_obstructed;
                 println!("Is obstructed: {}", is_obstructed);
