@@ -21,9 +21,7 @@ use crate::{
     calls::assigner,
     messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, NodeId},
 };
-use driver_rust::elevio::{
-    elev::{Elevator, CAB, HALL_DOWN, HALL_UP},
-};
+use driver_rust::elevio::elev::{CAB, Elevator, HALL_DOWN, HALL_UP};
 use std::collections::HashSet;
 use tokio::sync::mpsc;
 
@@ -61,11 +59,11 @@ pub async fn call_manager(
     // Used to determine which hall button lights should be
     // turned on or off when the world view updates.
     let mut previous_active_hall_calls: HashSet<Call> = HashSet::new();
+    let mut previous_active_cab_calls: HashSet<Call> = HashSet::new();
 
     while let Some(msg) = rx_call_manager.recv().await {
         match msg {
-
-            // A new glogal state snapshot has been received.
+            // A new global state snapshot has been received.
             // Update lights and determine which calls this elevator should serve
             MsgToCallManager::NewWorldView(world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
@@ -73,8 +71,19 @@ pub async fn call_manager(
                 // Cab calls belong only to this elevator.
                 // Ensure their lights are on and add them to the active call set.
                 let active_cab_calls = world.active_cab_calls(&elev_id);
-                for call in active_cab_calls {
+
+                // Turn on newly active cab calls
+                for call in active_cab_calls.difference(&previous_active_cab_calls) {
                     driver.call_button_light(call.floor, call.call_type, true);
+                }
+
+                // Turn off cleared cab calls
+                for call in previous_active_cab_calls.difference(&active_cab_calls) {
+                    driver.call_button_light(call.floor, call.call_type, false);
+                }
+                previous_active_cab_calls = active_cab_calls.clone();
+
+                for call in active_cab_calls {
                     all_active_calls.insert(call);
                 }
 
@@ -93,7 +102,8 @@ pub async fn call_manager(
 
                 // Run the hall call assignment algorithm to determine which
                 // hall calls should be served by this elevator.
-                let assigned_calls = assigner::run_assigner(world.clone(), &active_hall_calls, elev_id);
+                let assigned_calls =
+                    assigner::run_assigner(world.clone(), &active_hall_calls, elev_id);
                 for call in assigned_calls {
                     all_active_calls.insert(call);
                 }
@@ -107,25 +117,23 @@ pub async fn call_manager(
             // A call has been served by the elevator.
             // Update button lights and notify the world manager so
             // the global call state can be updated.
-            MsgToCallManager::ServedCall(call) => {
-                match call.call_type {
-                    CAB => {
-                        driver.call_button_light(call.floor, call.call_type, false);
-                        let _ = tx_world_manager
-                            .send(MsgToWorldManager::ServedCall(call.clone()))
-                            .await;
-                    }
-                    HALL_DOWN | HALL_UP => {
-                        let _ = tx_world_manager
-                            .send(MsgToWorldManager::ServedCall(call.clone()))
-                            .await;
-                    }
-                    other => {
-                        eprintln!("Invalid call_type: {other}");
-                        continue;
-                    }
+            MsgToCallManager::ServedCall(call) => match call.call_type {
+                CAB => {
+                    // driver.call_button_light(call.floor, call.call_type, false);
+                    let _ = tx_world_manager
+                        .send(MsgToWorldManager::ServedCall(call.clone()))
+                        .await;
                 }
-            }
+                HALL_DOWN | HALL_UP => {
+                    let _ = tx_world_manager
+                        .send(MsgToWorldManager::ServedCall(call.clone()))
+                        .await;
+                }
+                other => {
+                    eprintln!("Invalid call_type: {other}");
+                    continue;
+                }
+            },
         }
     }
 }
