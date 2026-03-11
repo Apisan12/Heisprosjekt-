@@ -19,9 +19,9 @@
 
 use crate::{
     calls::assigner,
-    messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, NodeId},
+    messages::{Call, MsgToCallManager, MsgToElevatorManager, NodeId},
 };
-use driver_rust::elevio::elev::{CAB, Elevator, HALL_DOWN, HALL_UP};
+use driver_rust::elevio::elev::Elevator;
 use std::collections::HashSet;
 use tokio::sync::mpsc;
 
@@ -52,7 +52,6 @@ pub async fn call_manager(
     elev_id: NodeId,
     driver: Elevator,
     mut rx_call_manager: mpsc::Receiver<MsgToCallManager>,
-    tx_world_manager: mpsc::Sender<MsgToWorldManager>,
     tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
 ) {
     // Stores the previously known set of active hall calls.
@@ -112,27 +111,6 @@ pub async fn call_manager(
                 let _ = tx_elevator_manager
                     .send(MsgToElevatorManager::ActiveCalls(all_active_calls))
                     .await;
-            }
-
-            // A call has been served by the elevator.
-            // Update button lights and notify the world manager so
-            // the global call state can be updated.
-            MsgToCallManager::ServedCall(call) => match call.call_type {
-                CAB => {
-                    // driver.call_button_light(call.floor, call.call_type, false);
-                    let _ = tx_world_manager
-                        .send(MsgToWorldManager::ServedCall(call.clone()))
-                        .await;
-                }
-                HALL_DOWN | HALL_UP => {
-                    let _ = tx_world_manager
-                        .send(MsgToWorldManager::ServedCall(call.clone()))
-                        .await;
-                }
-                other => {
-                    eprintln!("Invalid call_type: {other}");
-                    continue;
-                }
             },
         }
     }

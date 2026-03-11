@@ -22,32 +22,32 @@ use crate::network::network::*;
 
 #[derive(Debug)]
 pub struct Channels {
-    pub tx_manager: mpsc::Sender<MsgToCallManager>,
-    pub rx_manager: mpsc::Receiver<MsgToCallManager>,
-    pub tx_fsm: mpsc::Sender<MsgToElevatorManager>,
-    pub rx_fsm: mpsc::Receiver<MsgToElevatorManager>,
-    pub tx_world: mpsc::Sender<MsgToWorldManager>,
-    pub rx_world: mpsc::Receiver<MsgToWorldManager>,
-    pub tx_net: watch::Sender<ElevatorStatus>,
-    pub rx_net: watch::Receiver<ElevatorStatus>,
+    pub tx_call_manager: mpsc::Sender<MsgToCallManager>,
+    pub rx_call_manager: mpsc::Receiver<MsgToCallManager>,
+    pub tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
+    pub rx_elevator_manager: mpsc::Receiver<MsgToElevatorManager>,
+    pub tx_world_manager: mpsc::Sender<MsgToWorldManager>,
+    pub rx_world_manager: mpsc::Receiver<MsgToWorldManager>,
+    pub tx_network: watch::Sender<ElevatorStatus>,
+    pub rx_network: watch::Receiver<ElevatorStatus>,
 }
 
 impl Channels {
     pub fn new(initial_status: ElevatorStatus) -> Self {
-        let (tx_manager, rx_manager) = mpsc::channel::<MsgToCallManager>(32);
-        let (tx_fsm, rx_fsm) = mpsc::channel::<MsgToElevatorManager>(32);
-        let (tx_world, rx_world) = mpsc::channel::<MsgToWorldManager>(32);
-        let (tx_net, rx_net) = watch::channel(initial_status);
+        let (tx_call_manager, rx_call_manager) = mpsc::channel::<MsgToCallManager>(32);
+        let (tx_elevator_manager, rx_elevator_manager) = mpsc::channel::<MsgToElevatorManager>(32);
+        let (tx_world_manager, rx_world_manager) = mpsc::channel::<MsgToWorldManager>(32);
+        let (tx_network, rx_network) = watch::channel(initial_status);
 
         Self {
-            tx_manager,
-            rx_manager,
-            tx_fsm,
-            rx_fsm,
-            tx_world,
-            rx_world,
-            tx_net,
-            rx_net,
+            tx_call_manager,
+            rx_call_manager,
+            tx_elevator_manager,
+            rx_elevator_manager,
+            tx_world_manager,
+            rx_world_manager,
+            tx_network,
+            rx_network,
         }
     }
 }
@@ -185,46 +185,45 @@ pub fn spawn_tasks(
     println!("Starting tasks");
 
     let Channels {
-        tx_manager: tx_manager_msg,
-        rx_manager: rx_manager_msg,
-        tx_fsm: tx_fsm_msg,
-        rx_fsm: rx_fsm_msg,
-        tx_world: tx_world_view_msg,
-        rx_world: rx_world_view_msg,
-        tx_net: tx_network,
-        rx_net: rx_network,
+        tx_call_manager,
+        rx_call_manager,
+        tx_elevator_manager,
+        rx_elevator_manager,
+        tx_world_manager,
+        rx_world_manager,
+        tx_network,
+        rx_network,
     } = channels;
 
     // INPUT
     input::spawn_input_thread(
         elev_id,
         elevator.clone(),
-        tx_world_view_msg.clone(),
-        tx_fsm_msg.clone(),
+        tx_world_manager.clone(),
+        tx_elevator_manager.clone(),
         ELEV_POLL,
     );
 
     // NETWORK
     tokio::spawn(network_manager(
         rx_network.clone(),
-        tx_world_view_msg.clone(),
+        tx_world_manager.clone(),
     ));
 
     // ORDER MANAGER
     tokio::spawn(call_manager::call_manager(
         elev_id,
         elevator.clone(),
-        rx_manager_msg,
-        tx_world_view_msg.clone(),
-        tx_fsm_msg.clone(),
+        rx_call_manager,
+        tx_elevator_manager.clone(),
     ));
 
     // WORLD MANAGER
     tokio::spawn(world_view::world_manager(
         elev_id,
         initial_elev_status,
-        rx_world_view_msg,
-        tx_manager_msg.clone(),
+        rx_world_manager,
+        tx_call_manager.clone(),
         tx_network.clone(),
     ));
 
@@ -232,9 +231,8 @@ pub fn spawn_tasks(
     tokio::spawn(elevator_manager(
         elevator.clone(),
         floor,
-        rx_fsm_msg,
-        tx_manager_msg.clone(),
-        tx_world_view_msg.clone(),
+        rx_elevator_manager,
+        tx_world_manager.clone(),
     ));
 
     println!("Tasks started successfully");

@@ -4,9 +4,8 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
-use crate::elevator;
 use crate::messages::{
-    Call, CallList, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId,
+    Call, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId,
 };
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {

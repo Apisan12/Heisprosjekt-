@@ -97,19 +97,18 @@ impl<'a> fmt::Display for CallList<'a> {
 
 #[derive(Debug)]
 pub enum MsgToElevatorManager {
-    /// Recievs a message when the elevator reaches a new floor
+    /// Recievs a message when the elevator reaches a new floor.
     AtFloor(u8),
-    /// Revieves a message with the active calls every time there is a change
+    /// Revieves a message with the active calls every time there is a change.
     ActiveCalls(HashSet<Call>),
+    /// Receives a message when the obstruction state changes.
     Obstruction(bool),
 }
 
 #[derive(Debug)]
 pub enum MsgToCallManager {
-    /// Recieves the WorldView everytime there is a change
+    /// Recieves the WorldView everytime there is a change.
     NewWorldView(WorldView),
-    /// Recieves a message when the elevator has finished a call
-    ServedCall(Call),
 }
 
 #[derive(Debug)]

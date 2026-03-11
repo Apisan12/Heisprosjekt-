@@ -21,7 +21,7 @@
 //! - `driver` – hardware interface for motor, doors, and sensors
 
 use crate::config::{BOTTOM_FLOOR, DOOR_TIMEOUT, TOP_FLOOR, TRAVEL_TIMEOUT};
-use crate::messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager};
+use crate::messages::{Call, MsgToElevatorManager, MsgToWorldManager};
 use driver_rust::elevio::elev::{self, CAB, HALL_DOWN, HALL_UP};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -187,13 +187,13 @@ impl Elevator {
     /// The calls that are served are removed from the elevator's
     /// internal call set and reported to the call manager so the
     /// global system state can be updated.
-    async fn serve_current_floor(&mut self, tx_call_manager: &mpsc::Sender<MsgToCallManager>) {
+    async fn serve_current_floor(&mut self, tx_call_manager: &mpsc::Sender<MsgToWorldManager>) {
         let served = self.served_calls();
 
         for call in served {
             self.calls.remove(&call);
             let _ = tx_call_manager
-                .send(MsgToCallManager::ServedCall(call))
+                .send(MsgToWorldManager::ServedCall(call))
                 .await;
         }
     }
@@ -396,7 +396,6 @@ pub async fn elevator_manager(
     driver: elev::Elevator,
     initial_floor: u8,
     mut rx_elevator_manager: mpsc::Receiver<MsgToElevatorManager>,
-    tx_call_manager: mpsc::Sender<MsgToCallManager>,
     tx_world_manager: mpsc::Sender<MsgToWorldManager>,
 ) {
     let mut elevator = Elevator::new(driver.clone(), initial_floor);
@@ -424,7 +423,7 @@ pub async fn elevator_manager(
 
                         else if elevator.should_serve_here() {
                             elevator.stop();
-                            elevator.serve_current_floor(&tx_call_manager).await;
+                            elevator.serve_current_floor(&tx_world_manager).await;
                             elevator.open_door();
                             door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                         }
@@ -451,7 +450,7 @@ pub async fn elevator_manager(
                                 // Determines the next direction before opening the door so
                                 // hall calls are served according to the intended travel direction.
                                 elevator.direction = elevator.next_direction();
-                                elevator.serve_current_floor(&tx_call_manager).await;
+                                elevator.serve_current_floor(&tx_world_manager).await;
                                 elevator.open_door();
                                 door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                             } else {
@@ -491,7 +490,7 @@ pub async fn elevator_manager(
                 elevator.driver.door_light(false);
 
                 if elevator.should_serve_here() {
-                    elevator.serve_current_floor(&tx_call_manager).await;
+                    elevator.serve_current_floor(&tx_world_manager).await;
                     elevator.open_door();
                     door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                 } else {
