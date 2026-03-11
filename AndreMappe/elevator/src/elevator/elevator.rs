@@ -16,7 +16,6 @@
 //!
 //! The elevator manager communicates with:
 //!
-//! - `call_manager` – reports when calls have been served
 //! - `world_manager` – sends updates about elevator state
 //! - `driver` – hardware interface for motor, doors, and sensors
 
@@ -187,12 +186,12 @@ impl Elevator {
     /// The calls that are served are removed from the elevator's
     /// internal call set and reported to the call manager so the
     /// global system state can be updated.
-    async fn serve_current_floor(&mut self, tx_call_manager: &mpsc::Sender<MsgToWorldManager>) {
+    async fn serve_current_floor(&mut self, tx_world_manager: &mpsc::Sender<MsgToWorldManager>) {
         let served = self.served_calls();
 
         for call in served {
             self.calls.remove(&call);
-            let _ = tx_call_manager
+            let _ = tx_world_manager
                 .send(MsgToWorldManager::ServedCall(call))
                 .await;
         }

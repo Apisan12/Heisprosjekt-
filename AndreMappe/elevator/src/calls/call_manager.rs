@@ -9,11 +9,10 @@
 //! - Maintain the correct state of button lights
 //! - Determine which calls are active for the local elevator
 //! - Run the hall-call assignment algorithm
-//! - Notify the world manager when calls have been served
 //!
 //! The call manager communicates with:
 //!
-//! - `world_manager` – receives world state updates and reports served calls
+//! - `world_manager` – receives world state updates
 //! - `elevator_manager` – sends the set of active calls assigned to this elevator
 //! - `driver` – controls the button lights
 
@@ -27,27 +26,14 @@ use tokio::sync::mpsc;
 
 /// Asynchronous task responsible for managing elevator calls.
 ///
-/// The call manager receives updates about the global elevator state
-/// (`WorldView`) and determines which calls are active for the local
-/// elevator. It also ensures that the correct button lights are shown
-/// on the elevator panel.
+/// The call manager processes updates from the distributed world state
+/// and determines which calls are active for the local elevator. It also
+/// ensures that the correct button lights are shown on the elevator panel.
 ///
-/// # Responsibilities
-///
-/// - Track active hall calls across the system
-/// - Track cab calls belonging to this elevator
-/// - Run the hall-call assignment algorithm
-/// - Update button lights when calls appear or disappear
-/// - Notify the world manager when calls have been served
-///
-/// # Communication
-///
-/// Receives:
-/// - `MsgToCallManager` messages from the world manager and elevator manager
-///
-/// Sends:
-/// - `MsgToElevatorManager::ActiveCalls` to update the local elevator controller
-/// - `MsgToWorldManager::ServedCall` when a call has been completed
+/// Receives `MsgToCallManager` messages containing updated world views,
+/// updates cab and hall button lights, runs the hall-call assignment
+/// algorithm, and sends the resulting set of active calls to the
+/// `elevator_manager`.
 pub async fn call_manager(
     elev_id: NodeId,
     driver: Elevator,
