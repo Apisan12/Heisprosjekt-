@@ -15,8 +15,8 @@ use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldManager, Nod
 pub fn spawn_input_thread(
 elev_id: NodeId,
 elevator: Elevator,
-tx_world_view_msg: mpsc::Sender<MsgToWorldManager>,
-tx_fsm_msg: mpsc::Sender<MsgToElevatorManager>,
+tx_world_manager: mpsc::Sender<MsgToWorldManager>,
+tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
 period: Duration,
 ) {
 thread::spawn(move || {
@@ -44,7 +44,7 @@ let mut seq: u64 = 0;
                         floor: floor,
                         call_type: call,
                     };
-                    let _ = tx_world_view_msg.blocking_send(MsgToWorldManager::AddCall(call));
+                    let _ = tx_world_manager.blocking_send(MsgToWorldManager::AddCall(call));
                     println!("Call sent to WorldView: {}", call)
                 }
 
@@ -57,7 +57,7 @@ let mut seq: u64 = 0;
 
         if floor != prev_floor {
             if let Some(f) = floor {
-                let _ = tx_fsm_msg.blocking_send(MsgToElevatorManager::AtFloor(f));
+                let _ = tx_elevator_manager.blocking_send(MsgToElevatorManager::AtFloor(f));
             }
             prev_floor = floor;
         }
@@ -74,7 +74,7 @@ let mut seq: u64 = 0;
         let obstruction = elevator.obstruction();
 
         if obstruction != prev_obstruction {
-            let _ = tx_fsm_msg.blocking_send(MsgToElevatorManager::Obstruction(obstruction));
+            let _ = tx_elevator_manager.blocking_send(MsgToElevatorManager::Obstruction(obstruction));
             prev_obstruction = obstruction;
         }
 
