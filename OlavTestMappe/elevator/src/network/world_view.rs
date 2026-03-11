@@ -1,0 +1,291 @@
+use driver_rust::elevio::elev::{CAB, HALL_DOWN, HALL_UP};
+use serde::Serialize;
+use std::collections::{HashMap, HashSet};
+use tokio::sync::{mpsc, watch};
+
+use crate::assigner::AssignerState;
+use crate::messages::{
+    Call, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId,
+};
+#[derive(Debug, Clone, Serialize)]
+pub struct WorldView {
+    elevators: HashMap<NodeId, ElevatorStatus>,
+    disconnected_elevators: HashSet<NodeId>,
+}
+
+impl WorldView {
+    pub fn new(initial_status: ElevatorStatus) -> Self {
+        let mut elevators = HashMap::new();
+        elevators.insert(initial_status.elev_id, initial_status);
+
+        Self {
+            elevators,
+            disconnected_elevators: HashSet::new(),
+        }
+    }
+
+    /// Creates an iterator for the connected elevators.
+    pub fn elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+        self.elevators.iter()
+    }
+
+    /// Creates an iterator for the connected elevators.
+    pub fn connected_elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+        self.elevators
+            .iter()
+            .filter(move |(id, _)| !self.disconnected_elevators.contains(*id))
+    }
+
+    /// Gets the mutable local elev state
+    pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
+        self.elevators
+            .get_mut(id)
+            .expect("Local elevator must exist")
+    }
+
+    /// Gets the local elev state read only
+    pub fn local_elev(&self, id: &NodeId) -> &ElevatorStatus {
+        self.elevators.get(id).expect("Local elevator must exist")
+    }
+
+    /// Merges the hall calls on the other nodes to this node.
+    /// This works as an acknoledgment
+    pub fn merge_hall_calls(&mut self, elev_id: &NodeId) {
+        let mut all_hall_calls = HashSet::new();
+        let mut all_finished_calls = HashSet::new();
+
+        for (_, elev) in self.connected_elevators() {
+            all_hall_calls.extend(elev.hall_calls.iter().copied());
+            all_finished_calls.extend(elev.finished_hall_calls.iter().copied());
+        }
+
+        if let Some(elevator) = self.elevators.get_mut(elev_id) {
+            for call in &all_hall_calls {
+                if !all_finished_calls.contains(call) {
+                    elevator.hall_calls.insert(*call);
+                }
+            }
+            for call in &all_finished_calls {
+                // Only merge finished calls that still correspond to an active hall call
+                if all_hall_calls.contains(call) {
+                    elevator.finished_hall_calls.insert(*call);
+                }
+            }
+        }
+    }
+
+    /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
+    pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
+        let mut all_cab_calls = HashSet::new();
+
+        for (_, elevator) in self.elevators() {
+            all_cab_calls.extend(elevator.cab_calls.iter().copied());
+        }
+
+        if let Some(elevator) = self.elevators.get_mut(elev_id) {
+            elevator.known_cab_calls = all_cab_calls;
+        }
+    }
+
+    /// Checks the worldview for calls that are know on all connected elevators, these are active
+    /// returns these active calls
+
+    pub fn active_hall_calls(&self) -> HashSet<Call> {
+        let mut finished = HashSet::new();
+
+        for (_, elev) in self.connected_elevators() {
+            finished.extend(elev.finished_hall_calls.iter().copied());
+        }
+
+        let mut active = if let Some((_, first)) = self.connected_elevators().next() {
+            first.hall_calls.clone()
+        } else {
+            return HashSet::new();
+        };
+
+        for (_, elev) in self.connected_elevators() {
+            active.retain(|call| elev.hall_calls.contains(call));
+        }
+
+        active.retain(|call| !finished.contains(call));
+
+        active
+    }
+
+    /// Checks the worldview for calls that are known by other elevators since this means they are backed up
+    /// If the elevator is alone on the network, it sets the cab call as active since it cant be backed up
+    pub fn active_cab_calls(&self, elev_id: &NodeId) -> HashSet<Call> {
+        let elevator = self
+            .elevators
+            .get(elev_id)
+            .expect("Elevator not in worldview");
+        let mut active: HashSet<Call> = elevator.cab_calls.iter().copied().collect();
+
+        // If the elevator is alone in the worldview
+        if self.connected_elevators().all(|(id, _)| id == elev_id) {
+            return active;
+        }
+
+        // Only keep cab calls known by other elevators as active
+        active.retain(|call| {
+            self.connected_elevators()
+                .filter(|(id, _)| *id != elev_id)
+                .all(|(_, other)| other.known_cab_calls.contains(call))
+        });
+
+        active
+    }
+
+    /// Builds the assigner states to match the input needed for the assigner script
+    pub fn assigner_states(&self) -> HashMap<String, AssignerState> {
+        let mut states = HashMap::new();
+
+        for (id, elev) in self.connected_elevators() {
+            states.insert(format!("id_{id:?}"), AssignerState::from_elev(&self, elev));
+        }
+
+        states
+    }
+
+    /// Removes hall calls when they are seen as finished on every elevator
+    /// Remvoes from finished when the call is not in hall calls on any of the elevators
+    /// This is a two step propagation to ensure safe removing of hall calls
+    pub fn cleanup_hall_calls(&mut self, elev_id: &NodeId) {
+        let mut finished_by_all: HashSet<Call> = self
+            .connected_elevators()
+            .flat_map(|(_, e)| e.finished_hall_calls.iter().copied())
+            .collect();
+
+        finished_by_all.retain(|call| {
+            self.connected_elevators()
+                .any(|(_, elevator)| elevator.finished_hall_calls.contains(call))
+        });
+
+        // Remove only from the local elevator
+        if let Some(local) = self.elevators.get_mut(elev_id) {
+            for call in &finished_by_all {
+                local.hall_calls.remove(call);
+            }
+        }
+
+        let removable: HashSet<Call> = finished_by_all
+            .into_iter()
+            .filter(|call| {
+                !self
+                    .connected_elevators()
+                    .any(|(_, elevator)| elevator.hall_calls.contains(call))
+            })
+            .collect();
+
+        for elevator in self.elevators.values_mut() {
+            for call in &removable {
+                elevator.finished_hall_calls.remove(call);
+            }
+        }
+    }
+    pub fn remove_obstructed_elevators(&mut self) {
+        let obstructed: Vec<NodeId> = self
+            .elevators
+            .iter()
+            .filter(|(_, elev)| elev.has_faults)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for id in obstructed {
+            self.elevators.remove(&id);
+        }
+    }
+}
+
+pub async fn world_manager(
+    elev_id: NodeId,
+    initial_elev_status: ElevatorStatus,
+    mut rx_world_view_msg: mpsc::Receiver<MsgToWorldManager>,
+    tx_manager_msg: mpsc::Sender<MsgToCallManager>,
+    tx_network: watch::Sender<ElevatorStatus>,
+) {
+    let mut world = WorldView::new(initial_elev_status);
+
+    while let Some(msg) = rx_world_view_msg.recv().await {
+        match msg {
+            MsgToWorldManager::AddCall(call) => {
+                {
+                    println!("Call recieved in WorldView: {}", call);
+                    let elevator = world.local_elev_mut(&elev_id);
+                    match call.call_type {
+                        CAB => {
+                            elevator.cab_calls.insert(call);
+                            elevator.known_cab_calls.insert(call);
+                        }
+                        HALL_DOWN | HALL_UP => {
+                            elevator.hall_calls.insert(call);
+                        }
+                        _ => {}
+                    }
+                    println!("Transmitting to network:\n{}", call);
+                    let _ = tx_network.send(elevator.clone());
+                }
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+            MsgToWorldManager::ServedCall(call) => {
+                {
+                    let elevator = world.local_elev_mut(&elev_id);
+                    match call.call_type {
+                        CAB => {
+                            elevator.cab_calls.remove(&call);
+                        }
+                        HALL_DOWN | HALL_UP => {
+                            elevator.finished_hall_calls.insert(call);
+                            println!("Call served: {}", call)
+                        }
+                        _ => {}
+                    }
+                    let _ = tx_network.send(elevator.clone());
+                }
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+            MsgToWorldManager::NewLocalElevStatus(local_elev) => {
+                // update behaviour, floor, direction in worldview for this elevators id
+                let elev = world.local_elev_mut(&elev_id);
+                elev.behaviour = local_elev.behaviour;
+                elev.floor = local_elev.floor;
+                elev.direction = local_elev.direction;
+                elev.has_faults = local_elev.has_faults;
+
+                let _ = tx_network.send(elev.clone());
+            }
+            MsgToWorldManager::NewRemoteElevState(remote_elev) => {
+                // Add the updated elevator state to the world
+                world.elevators.insert(remote_elev.elev_id, remote_elev);
+                world.merge_hall_calls(&elev_id);
+                world.cleanup_hall_calls(&elev_id);
+
+                world.acknowledge_cab_calls(&elev_id);
+                let elev = world.local_elev(&elev_id);
+                let _ = tx_network.send(elev.clone());
+
+                // Sends the new world view to call manager
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+            MsgToWorldManager::AddDisconnectedElevator(remote_elev_id) => {
+                world.disconnected_elevators.insert(remote_elev_id);
+
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+            MsgToWorldManager::RemoveDisconnectedElevator(remote_elev_id) => {
+                world.disconnected_elevators.remove(&remote_elev_id);
+                let _ = tx_manager_msg
+                    .send(MsgToCallManager::NewWorldView(world.clone()))
+                    .await;
+            }
+        }
+    }
+}
