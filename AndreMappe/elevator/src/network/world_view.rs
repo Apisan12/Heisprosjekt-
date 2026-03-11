@@ -255,7 +255,7 @@ pub async fn world_manager(
                 elev.behaviour = local_elev.behaviour;
                 elev.floor = local_elev.floor;
                 elev.direction = local_elev.direction;
-                elev.is_obstructed = local_elev.is_obstructed;
+                elev.is_obstructed = local_elev.has_faults;
 
                 let _ = tx_network.send(elev.clone());
             }

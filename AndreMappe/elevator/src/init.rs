@@ -234,7 +234,6 @@ pub fn spawn_tasks(
         floor,
         rx_fsm_msg,
         tx_manager_msg.clone(),
-        tx_fsm_msg.clone(),
         tx_world_view_msg.clone(),
     ));
 

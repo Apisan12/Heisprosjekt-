@@ -13,4 +13,7 @@ pub const ELEV_POLL: Duration = Duration::from_millis(25);
 pub const BASE_ELEVATOR_PORT: u32 = 15656;
 pub const NETWORK_PORT: u16 = 30000;
 
-
+// Timers in seconds
+pub const DOOR_TIMEOUT: u64 = 3;
+pub const TRAVEL_DURATION: u64 = 3;
+pub const TRAVEL_TIMEOUT: u64 = TRAVEL_DURATION*2;

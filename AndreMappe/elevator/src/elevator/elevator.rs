@@ -10,6 +10,7 @@
 //! - Decide movement direction based on assigned calls
 //! - Serve calls at floors
 //! - Control door timing
+//! - Detect travel timeouts between floors
 //! - Handle obstruction events
 //! - Send status updates to the world view
 //!
@@ -19,18 +20,17 @@
 //! - `world_manager` – sends updates about elevator state
 //! - `driver` – hardware interface for motor, doors, and sensors
 
-use crate::config::{BOTTOM_FLOOR, TOP_FLOOR};
+use crate::config::{BOTTOM_FLOOR, DOOR_TIMEOUT, TOP_FLOOR, TRAVEL_TIMEOUT};
 use crate::messages::{Call, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager};
 use driver_rust::elevio::elev::{self, CAB, HALL_DOWN, HALL_UP};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep};
-
+use tokio::time::{Duration, Instant, sleep_until};
 
 /// External representation of the elevator behaviour.
-/// 
-/// This enum is used when reporting the elevator state to the 
+///
+/// This enum is used when reporting the elevator state to the
 /// `world_manager`. It is a simplified representation of
 /// [`ElevatorState`] that only exposes the behaviour relevant
 /// for the other system components.
@@ -43,7 +43,7 @@ pub enum Behaviour {
 }
 
 /// Direction of travel for the elevator.
-/// 
+///
 /// This is used both internally by the elevator manager and when
 /// reporting the elevator state to the `world_manager`.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,17 +95,17 @@ pub struct LocalElevatorStatus {
     pub direction: Direction,
     pub behaviour: Behaviour,
     /// Indicates whether the obstruction sensor is active.
-    pub is_obstructed: bool,
+    pub has_faults: bool,
 }
 
 impl LocalElevatorStatus {
     /// Creates a new elevator status message.
-    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour, is_obstructed: bool) -> Self {
+    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour, has_faults: bool) -> Self {
         Self {
             floor,
             direction,
             behaviour,
-            is_obstructed,
+            has_faults,
         }
     }
 }
@@ -126,6 +126,10 @@ struct Elevator {
     calls: HashSet<Call>,
     /// True if obstruction sensor is active.
     is_obstructed: bool,
+    /// True if the elevator used to long to travel between floors.
+    /// This indicates a temporary motor or movemement fault and prevents
+    /// the elevator from receiving new assignments.
+    travel_timeout: bool,
 }
 
 impl Elevator {
@@ -140,11 +144,12 @@ impl Elevator {
             direction: Direction::Stop,
             calls: HashSet::new(),
             is_obstructed: driver.obstruction(),
+            travel_timeout: false,
         }
     }
 
     /// Stops the elevator motor and resets the movement state.
-    /// 
+    ///
     /// This function updates both the motor direction and the
     /// internal state machine to reflect that the elevator is idle.
     fn stop(&mut self) {
@@ -178,7 +183,7 @@ impl Elevator {
     }
 
     /// Serves calls at the current floor.
-    /// 
+    ///
     /// The calls that are served are removed from the elevator's
     /// internal call set and reported to the call manager so the
     /// global system state can be updated.
@@ -212,7 +217,7 @@ impl Elevator {
     ///
     /// This is used when deciding whether hall calls should be served
     /// while the elevator is stopping at a floor.
-    /// 
+    ///
     /// If the elevator still has calls ahead in its current travel
     /// direction, that direction is preferred. Otherwise the function
     /// checks if there are hall calls at the current floor and returns
@@ -311,23 +316,11 @@ impl Elevator {
             .any(|call| call.floor < self.current_floor)
     }
 
-    /// Opens the elevator door and starts the door timer.
-    ///
-    /// The door remains open for 3 seconds before a
-    /// `DoorClosed` message is sent.
-    ///
-    /// Takes in the elevator manager channel as parameter.
-    fn open_door(&mut self, tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>) {
+    /// Opens the elevator door.
+    fn open_door(&mut self) {
         self.driver.door_light(true);
         self.state = ElevatorState::DoorOpen;
         self.direction = Direction::Stop;
-
-        tokio::spawn(async move {
-            sleep(Duration::from_secs(3)).await;
-            let _ = tx_elevator_manager
-                .send(MsgToElevatorManager::DoorClosed)
-                .await;
-        });
     }
 
     /// Sends the current elevator status to the `WorldView`.
@@ -339,7 +332,7 @@ impl Elevator {
             self.current_floor,
             self.direction,
             self.state.behaviour(),
-            self.is_obstructed,
+            self.is_obstructed || self.travel_timeout,
         );
 
         let _ = tx_world_manager
@@ -348,121 +341,178 @@ impl Elevator {
     }
 }
 
-/// Asynchronous task controlling the elevator.
+/// Simple watchdog timer used for door and travel timeouts.
+/// 
+/// The watchdog is started with a deadline and can be awaited
+/// inside `tokio::select!`. When inactive, the timer is disabled.
+/// 
+/// Used for:
+/// - Door open timeout
+/// - Elevator travel time between floors
+struct Watchdog {
+    deadline: Option<Instant>,
+}
+
+impl Watchdog {
+    fn new() -> Self {
+        Self { deadline: None }
+    }
+
+    /// Starts the watchdog with the given time duration.
+    fn start(&mut self, duration: Duration) {
+        self.deadline = Some(Instant::now() + duration);
+    }
+
+    /// Stops the watchdog and disables the timer.
+    fn stop(&mut self) {
+        self.deadline = None;
+    }
+
+    /// Future that resolves when the deadline expires.
+    async fn wait(&self) {
+        if let Some(deadline) = self.deadline {
+            sleep_until(deadline).await;
+        }
+    }
+
+    /// Returns tue if the watchdog is currently active.
+    fn active(&self) -> bool {
+        self.deadline.is_some()
+    }
+}
+
+/// Asynchronous task controlling the local elevator.
 ///
-/// This function acts as the manager for the elevator.
-/// It listens for messages from other system modules and updates
-/// the elevator state accordingly.
+/// The elevator manager maintains the elevator state machine and
+/// reacts to messages received through a Tokio channel.
 ///
-/// # Message Types
+/// It handles floor arrivals, call assignments, and obstruction
+/// events, while also monitoring door and travel timeouts using
+/// watchdog timers.
 ///
-/// - `AtFloor`
-///   Triggered by the floor sensor when the elevator reaches a floor.
-///   Received from the input thread.
-///
-/// - `ActiveCalls`
-///   Updated list of calls assigned to this elevator.
-///   Received from the call manager.
-///
-/// - `DoorClosed`
-///   Triggered after the door timer expires
-///   Generated internally by the elevator manager.
-///
-/// - `Obstruction`
-///   Triggered when the obstruction sensor changes state.
-///   Received from the input thread.
-///
-/// The manager sends messages to:
-///
-/// - `call_manager` - Sends served calls.
-/// - `world_manager` - Sends new elevator statuses.
-/// - `driver` - Controls motor, door light and floor indicator.
+/// After state changes, the manager sends updated elevator status
+/// messages to the `world_manager`.
 pub async fn elevator_manager(
     driver: elev::Elevator,
     initial_floor: u8,
     mut rx_elevator_manager: mpsc::Receiver<MsgToElevatorManager>,
     tx_call_manager: mpsc::Sender<MsgToCallManager>,
-    tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
     tx_world_manager: mpsc::Sender<MsgToWorldManager>,
 ) {
     let mut elevator = Elevator::new(driver.clone(), initial_floor);
+    let mut door_timer = Watchdog::new();
+    let mut travel_timer =  Watchdog::new();
 
-    while let Some(msg) = rx_elevator_manager.recv().await {
-        match msg {
-            // Triggered when the floor sensor detects a new floor.
-            MsgToElevatorManager::AtFloor(floor) => {
-                println!("At floor: {}", floor);
-                elevator.current_floor = floor;
-                elevator.driver.floor_indicator(floor);
+    loop {
+        tokio::select! {
 
-                // Stops the elevator at a floor if it has been unassigned a call it was going towards.
-                // This can happen if a new elevator joins the network that is closer to the call.
-                if elevator.calls.is_empty() {
-                    elevator.stop();
-                }
+            Some(msg) = rx_elevator_manager.recv() => {
+                match msg {
+                    // Triggered when the floor sensor detects a new floor.
+                    MsgToElevatorManager::AtFloor(floor) => {
+                        println!("At floor: {}", floor);
+                        elevator.current_floor = floor;
+                        elevator.driver.floor_indicator(floor);
+                        travel_timer.stop();
+                        elevator.travel_timeout = false;
 
-                else if elevator.should_serve_here() {
-                    elevator.stop();
-                    elevator.serve_current_floor(&tx_call_manager).await;
-                    elevator.open_door(tx_elevator_manager.clone());
-                }
+                        // Stops the elevator at a floor if it has been unassigned a call it was going towards.
+                        // This can happen if a new elevator joins the network that is closer to the call.
+                        if elevator.calls.is_empty() {
+                            elevator.stop();
+                        }
 
-                // Stops the elevator at the bottom or top floor, used as a defensive
-                // mechanism since there is no circumstance the elevator should move
-                // past these floors.
-                else if floor == BOTTOM_FLOOR || floor == TOP_FLOOR {
-                    elevator.stop();
-                }
+                        else if elevator.should_serve_here() {
+                            elevator.stop();
+                            elevator.serve_current_floor(&tx_call_manager).await;
+                            elevator.open_door();
+                            door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                        }
 
-                elevator.send_new_status(&tx_world_manager).await;
-            }
-            // Updated call assignments from the call manager.
-            MsgToElevatorManager::ActiveCalls(calls) => {
-                elevator.calls = calls;
+                        // Stops the elevator at the bottom or top floor, used as a defensive
+                        // mechanism since there is no circumstance the elevator should move
+                        // past these floors.
+                        else if floor == BOTTOM_FLOOR || floor == TOP_FLOOR {
+                            elevator.stop();
+                        }
 
-                if elevator.is_obstructed {
-                    continue;
-                }
-
-                if elevator.state == ElevatorState::Idle {
-                    if elevator.should_serve_here() {
-                        // Determines the next direction before opening the door so
-                        // hall calls are served according to the intended travel direction.
-                        elevator.direction = elevator.next_direction();
-                        elevator.serve_current_floor(&tx_call_manager).await;
-                        elevator.open_door(tx_elevator_manager.clone());
-                    } else {
-                        elevator.serve_next_action();
+                        elevator.send_new_status(&tx_world_manager).await;
                     }
-                    elevator.send_new_status(&tx_world_manager).await;
+                    // Updated call assignments from the call manager.
+                    MsgToElevatorManager::ActiveCalls(calls) => {
+                        elevator.calls = calls;
+
+                        if elevator.is_obstructed {
+                            continue;
+                        }
+
+                        if elevator.state == ElevatorState::Idle {
+                            if elevator.should_serve_here() {
+                                // Determines the next direction before opening the door so
+                                // hall calls are served according to the intended travel direction.
+                                elevator.direction = elevator.next_direction();
+                                elevator.serve_current_floor(&tx_call_manager).await;
+                                elevator.open_door();
+                                door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                            } else {
+                                elevator.serve_next_action();
+                                if elevator.state == ElevatorState::Moving {
+                                    travel_timer.start(Duration::from_secs(TRAVEL_TIMEOUT));
+                                }
+                            }
+                            elevator.send_new_status(&tx_world_manager).await;
+                        }
+                    }
+
+                    // Obstruction sensor changed state.
+                    MsgToElevatorManager::Obstruction(is_obstructed) => {
+                        elevator.is_obstructed = is_obstructed;
+                        println!("Is obstructed: {}", is_obstructed);
+                        if is_obstructed && elevator.state == ElevatorState::DoorOpen {
+                            elevator.open_door();
+                            door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                        }
+                        elevator.send_new_status(&tx_world_manager).await;
+                    }
                 }
             }
-            // Door timer expired.
-            MsgToElevatorManager::DoorClosed => {
+
+            // Door timer expired, elevator door is closed.
+            _ = door_timer.wait(), if door_timer.active() => {
+
+                door_timer.stop();
+
                 if elevator.is_obstructed {
-                    elevator.open_door(tx_elevator_manager.clone());
+                    elevator.open_door();
+                    door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                     continue;
                 }
 
                 elevator.driver.door_light(false);
+
                 if elevator.should_serve_here() {
                     elevator.serve_current_floor(&tx_call_manager).await;
-                    elevator.open_door(tx_elevator_manager.clone());
+                    elevator.open_door();
+                    door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                 } else {
                     elevator.serve_next_action();
+                    if elevator.state == ElevatorState::Moving {
+                        travel_timer.start(Duration::from_secs(TRAVEL_TIMEOUT));
+                    }
                 }
                 elevator.send_new_status(&tx_world_manager).await;
             }
 
-            // Obstruction sensor changed state.
-            MsgToElevatorManager::Obstruction(is_obstructed) => {
-                elevator.is_obstructed = is_obstructed;
-                println!("Is obstructed: {}", is_obstructed);
-                if is_obstructed && elevator.state == ElevatorState::DoorOpen {
-                    elevator.open_door(tx_elevator_manager.clone());
-                }
+            // Travel timer expired, elevator did not reach a floor in time.
+            _ = travel_timer.wait(), if travel_timer.active() => {
+                println!("Travel timeout detected");
+
+                elevator.travel_timeout = true;
+                travel_timer.stop();
+
                 elevator.send_new_status(&tx_world_manager).await;
             }
         }
     }
 }
+

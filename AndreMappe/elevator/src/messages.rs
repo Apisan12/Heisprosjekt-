@@ -101,7 +101,6 @@ pub enum MsgToElevatorManager {
     AtFloor(u8),
     /// Revieves a message with the active calls every time there is a change
     ActiveCalls(HashSet<Call>),
-    DoorClosed,
     Obstruction(bool),
 }
 
