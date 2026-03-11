@@ -187,7 +187,7 @@ impl WorldView {
         let obstructed: Vec<NodeId> = self
             .elevators
             .iter()
-            .filter(|(_, elev)| elev.is_obstructed)
+            .filter(|(_, elev)| elev.has_faults)
             .map(|(id, _)| id.clone())
             .collect();
 
@@ -254,7 +254,7 @@ pub async fn world_manager(
                 elev.behaviour = local_elev.behaviour;
                 elev.floor = local_elev.floor;
                 elev.direction = local_elev.direction;
-                elev.is_obstructed = local_elev.has_faults;
+                elev.has_faults = local_elev.has_faults;
 
                 let _ = tx_network.send(elev.clone());
             }

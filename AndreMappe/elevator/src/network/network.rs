@@ -277,30 +277,30 @@ fn print_state_change(old: &ElevatorStatus, new: &ElevatorStatus) {
         println!("Direction: {:?} -> {:?}", old.direction, new.direction);
     }
 
-    if old.cab_calls != new.cab_calls {
-        println!("Cab calls changed");
-        println!("Old: {}", CallList(&old.cab_calls));
-        println!("New: {}", CallList(&new.cab_calls));
-    }
+    // if old.cab_calls != new.cab_calls {
+    //     println!("Cab calls changed");
+    //     println!("Old: {}", CallList(&old.cab_calls));
+    //     println!("New: {}", CallList(&new.cab_calls));
+    // }
 
-    if old.hall_calls != new.hall_calls {
-        println!("Hall calls changed");
-        println!("Old: {}", CallList(&old.hall_calls));
-        println!("New: {}", CallList(&new.hall_calls));
-    }
+    // if old.hall_calls != new.hall_calls {
+    //     println!("Hall calls changed");
+    //     println!("Old: {}", CallList(&old.hall_calls));
+    //     println!("New: {}", CallList(&new.hall_calls));
+    // }
 
-    if old.finished_hall_calls != new.finished_hall_calls {
-        println!("Finished hall calls changed");
-        println!("Old: {}", CallList(&old.finished_hall_calls));
-        println!("New: {}", CallList(&new.finished_hall_calls));
-    }
+    // if old.finished_hall_calls != new.finished_hall_calls {
+    //     println!("Finished hall calls changed");
+    //     println!("Old: {}", CallList(&old.finished_hall_calls));
+    //     println!("New: {}", CallList(&new.finished_hall_calls));
+    // }
 
-    if old.known_cab_calls != new.known_cab_calls {
-        println!("Known cab calls changed");
-        println!("Old: {}", CallList(&old.known_cab_calls));
-        println!("New: {}", CallList(&new.known_cab_calls));
-    }
-    if old.is_obstructed != new.is_obstructed {
-        println!("Obstruction changed: {}", new.is_obstructed);
+    // if old.known_cab_calls != new.known_cab_calls {
+    //     println!("Known cab calls changed");
+    //     println!("Old: {}", CallList(&old.known_cab_calls));
+    //     println!("New: {}", CallList(&new.known_cab_calls));
+    // }
+    if old.has_faults != new.has_faults {
+        println!("Obstruction changed: {}", new.has_faults);
     }
 }

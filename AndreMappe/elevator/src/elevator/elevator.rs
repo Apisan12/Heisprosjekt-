@@ -154,7 +154,6 @@ impl Elevator {
     fn stop(&mut self) {
         self.driver.motor_direction(elev::DIRN_STOP);
         self.state = ElevatorState::Idle;
-        self.direction = Direction::Stop;
     }
 
     /// Determines and executes the next movement action.
@@ -319,7 +318,7 @@ impl Elevator {
     fn open_door(&mut self) {
         self.driver.door_light(true);
         self.state = ElevatorState::DoorOpen;
-        self.direction = Direction::Stop;
+        self.direction = self.next_direction();
     }
 
     /// Sends the current elevator status to the `WorldView`.
@@ -444,11 +443,11 @@ pub async fn elevator_manager(
                             continue;
                         }
 
+                        // Set intended travel direction before deciding which hall calls to serve
+                        elevator.direction = elevator.next_direction();
+
                         if elevator.state == ElevatorState::Idle {
                             if elevator.should_serve_here() {
-                                // Determines the next direction before opening the door so
-                                // hall calls are served according to the intended travel direction.
-                                elevator.direction = elevator.next_direction();
                                 elevator.serve_current_floor(&tx_world_manager).await;
                                 elevator.open_door();
                                 door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
@@ -485,7 +484,8 @@ pub async fn elevator_manager(
                     door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
                     continue;
                 }
-
+                // Update intended travel direction before deciding whether to serve or depart.
+                elevator.direction = elevator.next_direction();
                 elevator.driver.door_light(false);
 
                 if elevator.should_serve_here() {
