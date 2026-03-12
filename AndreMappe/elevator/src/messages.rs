@@ -6,12 +6,12 @@ use std::fmt;
 use crate::network::world_view::WorldView;
 use crate::elevator::elevator::{LocalElevatorStatus, Direction, Behaviour};
 
-pub type NodeId = [u8; 6]; // MAC-sized identity
+pub type ElevatorId = [u8; 6]; // MAC-sized identity
 
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ElevatorStatus {
-    pub elev_id: NodeId,
+    pub elev_id: ElevatorId,
     pub behaviour: Behaviour,
     pub floor: u8,
     pub direction: Direction,
@@ -23,7 +23,7 @@ pub struct ElevatorStatus {
 }
 
 impl ElevatorStatus {
-    pub fn new(id: NodeId, floor: u8) -> Self {
+    pub fn new(id: ElevatorId, floor: u8) -> Self {
         Self {
             elev_id: id,
             behaviour: Behaviour::Idle,
@@ -48,7 +48,7 @@ impl ElevatorStatus {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CallId {
-    pub elev_id: NodeId,
+    pub elev_id: ElevatorId,
     pub seq: u64,
 }
 
@@ -115,8 +115,8 @@ pub enum MsgToCallManager {
 pub enum MsgToWorldManager {
     AddCall(Call),
     ServedCall(Call),
-    NewLocalElevStatus(LocalElevatorStatus),
+    NewLocalElevatorStatus(LocalElevatorStatus),
     NewRemoteElevState(ElevatorStatus),
-    AddDisconnectedElevator(NodeId),
-    RemoveDisconnectedElevator(NodeId),
+    AddDisconnectedElevator(ElevatorId),
+    RemoveDisconnectedElevator(ElevatorId),
 }

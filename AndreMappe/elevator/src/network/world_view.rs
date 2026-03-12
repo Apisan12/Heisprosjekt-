@@ -5,12 +5,12 @@ use tokio::sync::{mpsc, watch};
 
 use crate::assigner::AssignerState;
 use crate::messages::{
-    Call, ElevatorStatus, MsgToCallManager, MsgToWorldManager, NodeId,
+    Call, ElevatorStatus, MsgToCallManager, MsgToWorldManager, ElevatorId,
 };
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldView {
-    elevators: HashMap<NodeId, ElevatorStatus>,
-    disconnected_elevators: HashSet<NodeId>,
+    elevators: HashMap<ElevatorId, ElevatorStatus>,
+    disconnected_elevators: HashSet<ElevatorId>,
 }
 
 impl WorldView {
@@ -25,32 +25,32 @@ impl WorldView {
     }
 
     /// Creates an iterator for the connected elevators.
-    pub fn elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+    pub fn elevators(&self) -> impl Iterator<Item = (&ElevatorId, &ElevatorStatus)> {
         self.elevators.iter()
     }
 
     /// Creates an iterator for the connected elevators.
-    pub fn connected_elevators(&self) -> impl Iterator<Item = (&NodeId, &ElevatorStatus)> {
+    pub fn connected_elevators(&self) -> impl Iterator<Item = (&ElevatorId, &ElevatorStatus)> {
         self.elevators
             .iter()
             .filter(move |(id, _)| !self.disconnected_elevators.contains(*id))
     }
 
     /// Gets the mutable local elev state
-    pub fn local_elev_mut(&mut self, id: &NodeId) -> &mut ElevatorStatus {
+    pub fn local_elev_mut(&mut self, id: &ElevatorId) -> &mut ElevatorStatus {
         self.elevators
             .get_mut(id)
             .expect("Local elevator must exist")
     }
 
     /// Gets the local elev state read only
-    pub fn local_elev(&self, id: &NodeId) -> &ElevatorStatus {
+    pub fn local_elev(&self, id: &ElevatorId) -> &ElevatorStatus {
         self.elevators.get(id).expect("Local elevator must exist")
     }
 
     /// Merges the hall calls on the other nodes to this node.
     /// This works as an acknoledgment
-    pub fn merge_hall_calls(&mut self, elev_id: &NodeId) {
+    pub fn merge_hall_calls(&mut self, elev_id: &ElevatorId) {
         let mut all_hall_calls = HashSet::new();
         let mut all_finished_calls = HashSet::new();
 
@@ -75,7 +75,7 @@ impl WorldView {
     }
 
     /// Adds the cab calls it has seen on the network to known_cab_calls as an acknowledgment
-    pub fn acknowledge_cab_calls(&mut self, elev_id: &NodeId) {
+    pub fn acknowledge_cab_calls(&mut self, elev_id: &ElevatorId) {
         let mut all_cab_calls = HashSet::new();
 
         for (_, elevator) in self.elevators() {
@@ -114,7 +114,7 @@ impl WorldView {
 
     /// Checks the worldview for calls that are known by other elevators since this means they are backed up
     /// If the elevator is alone on the network, it sets the cab call as active since it cant be backed up
-    pub fn active_cab_calls(&self, elev_id: &NodeId) -> HashSet<Call> {
+    pub fn active_cab_calls(&self, elev_id: &ElevatorId) -> HashSet<Call> {
         let elevator = self
             .elevators
             .get(elev_id)
@@ -150,7 +150,7 @@ impl WorldView {
     /// Removes hall calls when they are seen as finished on every elevator
     /// Remvoes from finished when the call is not in hall calls on any of the elevators
     /// This is a two step propagation to ensure safe removing of hall calls
-    pub fn cleanup_hall_calls(&mut self, elev_id: &NodeId) {
+    pub fn cleanup_hall_calls(&mut self, elev_id: &ElevatorId) {
         let mut finished_by_all: HashSet<Call> = self
             .connected_elevators()
             .flat_map(|(_, e)| e.finished_hall_calls.iter().copied())
@@ -184,7 +184,7 @@ impl WorldView {
         }
     }
     pub fn remove_faulty_elevators(&mut self) {
-        let obstructed: Vec<NodeId> = self
+        let obstructed: Vec<ElevatorId> = self
             .elevators
             .iter()
             .filter(|(_, elev)| elev.has_faults)
@@ -198,7 +198,7 @@ impl WorldView {
 }
 
 pub async fn world_manager(
-    elev_id: NodeId,
+    elev_id: ElevatorId,
     initial_elev_status: ElevatorStatus,
     mut rx_world_view_msg: mpsc::Receiver<MsgToWorldManager>,
     tx_manager_msg: mpsc::Sender<MsgToCallManager>,
@@ -248,7 +248,7 @@ pub async fn world_manager(
                     .send(MsgToCallManager::NewWorldView(world.clone()))
                     .await;
             }
-            MsgToWorldManager::NewLocalElevStatus(local_elev) => {
+            MsgToWorldManager::NewLocalElevatorStatus(local_elev) => {
                 // update behaviour, floor, direction in worldview for this elevators id
                 let elev = world.local_elev_mut(&elev_id);
                 elev.behaviour = local_elev.behaviour;

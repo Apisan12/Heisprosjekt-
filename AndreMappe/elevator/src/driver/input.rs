@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use driver_rust::elevio::elev::Elevator;
 
-use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldManager, NodeId};
+use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldManager, ElevatorId};
 
 /// Spawns the hardware polling thread.
 ///
@@ -13,7 +13,7 @@ use crate::messages::{Call, CallId, MsgToElevatorManager, MsgToWorldManager, Nod
 /// - Poll stop button -> Sends to elevator_manager
 /// - Poll obstruction switch -> Sends to elevator_manager
 pub fn spawn_input_thread(
-elev_id: NodeId,
+elev_id: ElevatorId,
 elevator: Elevator,
 tx_world_manager: mpsc::Sender<MsgToWorldManager>,
 tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,

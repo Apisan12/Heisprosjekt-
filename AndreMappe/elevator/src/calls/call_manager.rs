@@ -18,7 +18,7 @@
 
 use crate::{
     calls::assigner,
-    messages::{Call, MsgToCallManager, MsgToElevatorManager, NodeId},
+    messages::{Call, MsgToCallManager, MsgToElevatorManager, ElevatorId},
 };
 use driver_rust::elevio::elev::Elevator;
 use std::collections::HashSet;
@@ -35,7 +35,7 @@ use tokio::sync::mpsc;
 /// algorithm, and sends the resulting set of active calls to the
 /// `elevator_manager`.
 pub async fn call_manager(
-    elev_id: NodeId,
+    elev_id: ElevatorId,
     driver: Elevator,
     mut rx_call_manager: mpsc::Receiver<MsgToCallManager>,
     tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,

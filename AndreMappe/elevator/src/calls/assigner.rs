@@ -21,7 +21,7 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use crate::messages::{Call, ElevatorStatus, NodeId};
+use crate::messages::{Call, ElevatorStatus, ElevatorId};
 use crate::network::world_view::WorldView;
 use crate::config::ELEV_NUM_FLOORS;
 use crate::elevator::elevator::{Behaviour, Direction};
@@ -108,7 +108,7 @@ impl AssignerState {
 pub fn run_assigner(
     mut world: WorldView,
     active_calls: &HashSet<Call>,
-    elevator_id: NodeId,
+    elevator_id: ElevatorId,
 ) -> HashSet<Call> {
 
     // Removes faulty elevators, so they dont get any assignments.

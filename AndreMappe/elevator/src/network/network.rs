@@ -9,7 +9,7 @@
 //! - detecting disconnected and reconnected peers
 
 use crate::config::NETWORK_PORT;
-use crate::messages::{Call, ElevatorStatus, MsgToWorldManager, NodeId};
+use crate::messages::{Call, ElevatorStatus, MsgToWorldManager, ElevatorId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
@@ -124,7 +124,7 @@ pub async fn test_network_self_send() -> bool {
 /// port and collects any cab calls from broadcast elevator states that
 /// belong to `node_id`.
 /// Returns the recovered set of calls.
-pub async fn recover_startup_state(node_id: NodeId) -> HashSet<Call> {
+pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
     // Create UDP socket (same way the network manager does)
     let socket = create_socket(NETWORK_PORT);
     // let socket = Arc::new(socket);
@@ -199,8 +199,8 @@ pub async fn network_manager(
     let mut buf = [0u8; 4096];
 
     let mut local_elevator_state = rx_network.borrow().clone();
-    let mut known_elevators: HashMap<NodeId, (Instant, ElevatorStatus)> = HashMap::new();
-    let mut disconnected_elevators: HashMap<NodeId, ElevatorStatus> = HashMap::new();
+    let mut known_elevators: HashMap<ElevatorId, (Instant, ElevatorStatus)> = HashMap::new();
+    let mut disconnected_elevators: HashMap<ElevatorId, ElevatorStatus> = HashMap::new();
 
     let socket = create_socket(NETWORK_PORT);
 
@@ -273,7 +273,7 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
                     .await;
     }
     if let Ok(initializing_elevator) =
-        bincode::deserialize::<NodeId>(&buf[..len])
+        bincode::deserialize::<ElevatorId>(&buf[..len])
     {
         if let Some(elevator) = disconnected_elevators.get(&initializing_elevator) {
             let recovered_cab_calls = elevator.cab_calls.clone();

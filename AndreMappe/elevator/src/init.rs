@@ -13,7 +13,7 @@ use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
 use tokio::sync::{mpsc, watch};
 use tokio::time::{sleep, Duration};
 use crate::config::*;
-use crate::messages::{CallList, ElevatorStatus, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, NodeId};
+use crate::messages::{CallList, ElevatorStatus, MsgToCallManager, MsgToElevatorManager, MsgToWorldManager, ElevatorId};
 use crate::driver::input;
 use crate::network::world_view;
 use crate::calls::call_manager;
@@ -70,7 +70,7 @@ impl Channels {
 
 /// Parse elevator id from CLI args. Only used for simulating several elevators at the same machine.
 /// Expects: cargo run -- <id> 
-pub fn parse_id() -> NodeId {
+pub fn parse_id() -> ElevatorId {
     let n: u8 = std::env::args()
         .nth(1)
         .and_then(|s| s.parse().ok())
@@ -83,7 +83,7 @@ pub fn parse_id() -> NodeId {
 /// Data produced during startup and needed to launch the runtime.
 #[derive(Debug)]
 pub struct BootContext {
-    pub node_id: NodeId,
+    pub node_id: ElevatorId,
     pub elevator: e::Elevator,
     pub floor: u8,
     pub initial_status: ElevatorStatus,
@@ -159,7 +159,7 @@ pub async fn boot() -> std::io::Result<BootContext> {
 /// The simulator/driver port is derived from the final byte of `slot`,
 /// allowing multiple local instances to run on different ports.
 /// Initialize elevator driver connection and return the Elevator handle.
-pub fn init_elevator(slot: NodeId) -> std::io::Result<e::Elevator> {
+pub fn init_elevator(slot: ElevatorId) -> std::io::Result<e::Elevator> {
     let port = BASE_ELEVATOR_PORT + slot[5] as u32;
     let addr = format!("localhost:{}", port);
 
@@ -199,7 +199,7 @@ pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 /// - world-state management
 /// - elevator state machine / motion control
 pub fn spawn_tasks(
-    elev_id: NodeId,
+    elev_id: ElevatorId,
     elevator: e::Elevator,
     initial_elev_status: ElevatorStatus,
     floor: u8,

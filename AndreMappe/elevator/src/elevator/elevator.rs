@@ -67,8 +67,6 @@ enum ElevatorState {
     /// Elevator doors are open at a floor.
     DoorOpen,
 
-    /// When the elevator has stopped because of the stop button. (NOT IMPLEMENTED)
-    _Stopped,
 }
 
 impl ElevatorState {
@@ -78,7 +76,6 @@ impl ElevatorState {
             ElevatorState::Idle => Behaviour::Idle,
             ElevatorState::Moving => Behaviour::Moving,
             ElevatorState::DoorOpen => Behaviour::DoorOpen,
-            ElevatorState::_Stopped => Behaviour::Idle,
         }
     }
 }
@@ -334,7 +331,7 @@ impl Elevator {
         );
 
         let _ = tx_world_manager
-            .send(MsgToWorldManager::NewLocalElevStatus(status))
+            .send(MsgToWorldManager::NewLocalElevatorStatus(status))
             .await;
     }
 }
