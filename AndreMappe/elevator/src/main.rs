@@ -1,6 +1,6 @@
 //! Entry point for the distributed elevator controller.
 //!
-//! This module initializes the local elevator node, starts all runtime tasks,
+//! This module initializes the local elevator, starts all runtime tasks,
 //! and then keeps the async runtime alive for the lifetime of the program.
 
 mod config;

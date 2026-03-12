@@ -1,4 +1,4 @@
-//! Hall request assignment module.
+//! Hall calls assignment module.
 //!
 //! This module provides the interface between the elevator system
 //! and the external `hall_request_assigner` executable. The assigner takes
@@ -21,6 +21,7 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
+use std::path::PathBuf;
 use crate::messages::{Call, ElevatorStatus, ElevatorId};
 use crate::network::world_view::WorldView;
 use crate::config::ELEVATOR_NUM_FLOORS;
@@ -117,7 +118,9 @@ pub fn run_assigner(
     let input = AssignerInput::new(&world, &active_calls);
     let json_input = serde_json::to_string(&input).unwrap();
 
-    let output = Command::new("./hall_request_assigner")
+    let assigner_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("hall_request_assigner");
+
+    let output = Command::new(assigner_path)
         .arg("--input")
         .arg(&json_input)
         .output()
