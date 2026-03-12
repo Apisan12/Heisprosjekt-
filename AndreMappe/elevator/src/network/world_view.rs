@@ -141,7 +141,7 @@ impl WorldView {
         let mut states = HashMap::new();
 
         for (id, elev) in self.connected_elevators() {
-            states.insert(format!("id_{id:?}"), AssignerState::from_elev(&self, elev));
+            states.insert(format!("id_{id:?}"), AssignerState::from_elevator(&self, elev));
         }
 
         states
@@ -183,7 +183,7 @@ impl WorldView {
             }
         }
     }
-    pub fn remove_obstructed_elevators(&mut self) {
+    pub fn remove_faulty_elevators(&mut self) {
         let obstructed: Vec<NodeId> = self
             .elevators
             .iter()

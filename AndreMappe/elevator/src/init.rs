@@ -36,7 +36,7 @@ pub struct Channels {
 }
 
 
- /// Create a new set of channels for inter-task communication.
+/// Create a new set of channels for inter-task communication.
 /// The `initial_status` value is used to initialize the watch channel so that the networking layer immediately has a valid local state.
 impl Channels {
     pub fn new(initial_status: ElevatorStatus) -> Self {
