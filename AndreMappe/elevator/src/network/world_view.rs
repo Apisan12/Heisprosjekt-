@@ -16,7 +16,7 @@ pub struct WorldView {
 impl WorldView {
     pub fn new(initial_status: ElevatorStatus) -> Self {
         let mut elevators = HashMap::new();
-        elevators.insert(initial_status.elev_id, initial_status);
+        elevators.insert(initial_status.elevator_id, initial_status);
 
         Self {
             elevators,
@@ -56,7 +56,7 @@ impl WorldView {
 
         for (_, elev) in self.connected_elevators() {
             all_hall_calls.extend(elev.hall_calls.iter().copied());
-            all_finished_calls.extend(elev.finished_hall_calls.iter().copied());
+            all_finished_calls.extend(elev.served_hall_calls.iter().copied());
         }
 
         if let Some(elevator) = self.elevators.get_mut(elev_id) {
@@ -68,7 +68,7 @@ impl WorldView {
             for call in &all_finished_calls {
                 // Only merge finished calls that still correspond to an active hall call
                 if all_hall_calls.contains(call) {
-                    elevator.finished_hall_calls.insert(*call);
+                    elevator.served_hall_calls.insert(*call);
                 }
             }
         }
@@ -94,7 +94,7 @@ impl WorldView {
         let mut finished = HashSet::new();
 
         for (_, elev) in self.connected_elevators() {
-            finished.extend(elev.finished_hall_calls.iter().copied());
+            finished.extend(elev.served_hall_calls.iter().copied());
         }
 
         let mut active = if let Some((_, first)) = self.connected_elevators().next() {
@@ -153,12 +153,12 @@ impl WorldView {
     pub fn cleanup_hall_calls(&mut self, elev_id: &ElevatorId) {
         let mut finished_by_all: HashSet<Call> = self
             .connected_elevators()
-            .flat_map(|(_, e)| e.finished_hall_calls.iter().copied())
+            .flat_map(|(_, e)| e.served_hall_calls.iter().copied())
             .collect();
 
         finished_by_all.retain(|call| {
             self.connected_elevators()
-                .any(|(_, elevator)| elevator.finished_hall_calls.contains(call))
+                .any(|(_, elevator)| elevator.served_hall_calls.contains(call))
         });
 
         // Remove only from the local elevator
@@ -179,7 +179,7 @@ impl WorldView {
 
         for elevator in self.elevators.values_mut() {
             for call in &removable {
-                elevator.finished_hall_calls.remove(call);
+                elevator.served_hall_calls.remove(call);
             }
         }
     }
@@ -237,7 +237,7 @@ pub async fn world_manager(
                             elevator.cab_calls.remove(&call);
                         }
                         HALL_DOWN | HALL_UP => {
-                            elevator.finished_hall_calls.insert(call);
+                            elevator.served_hall_calls.insert(call);
                             println!("Call served: {}", call)
                         }
                         _ => {}
@@ -260,7 +260,7 @@ pub async fn world_manager(
             }
             MsgToWorldManager::NewRemoteElevState(remote_elev) => {
                 // Add the updated elevator state to the world
-                world.elevators.insert(remote_elev.elev_id, remote_elev);
+                world.elevators.insert(remote_elev.elevator_id, remote_elev);
                 world.merge_hall_calls(&elev_id);
                 world.cleanup_hall_calls(&elev_id);
 

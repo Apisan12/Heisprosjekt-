@@ -30,18 +30,18 @@ use tokio::sync::mpsc;
 /// and determines which calls are active for the local elevator. It also
 /// ensures that the correct button lights are shown on the elevator panel.
 ///
-/// Receives `MsgToCallManager` messages containing updated world views,
+/// Receives `NewWorldView` messages containing updated world views,
 /// updates cab and hall button lights, runs the hall-call assignment
 /// algorithm, and sends the resulting set of active calls to the
 /// `elevator_manager`.
 pub async fn call_manager(
-    elev_id: ElevatorId,
+    elevator_id: ElevatorId,
     driver: Elevator,
     mut rx_call_manager: mpsc::Receiver<MsgToCallManager>,
     tx_elevator_manager: mpsc::Sender<MsgToElevatorManager>,
 ) {
-    // Stores the previously known set of active hall calls.
-    // Used to determine which hall button lights should be
+    // Stores the previously known set of active hall calls and cab calls.
+    // Used to determine which button lights should be
     // turned on or off when the world view updates.
     let mut previous_active_hall_calls: HashSet<Call> = HashSet::new();
     let mut previous_active_cab_calls: HashSet<Call> = HashSet::new();
@@ -53,19 +53,20 @@ pub async fn call_manager(
             MsgToCallManager::NewWorldView(world) => {
                 let mut all_active_calls: HashSet<Call> = HashSet::new();
 
-                // Cab calls belong only to this elevator.
-                // Ensure their lights are on and add them to the active call set.
-                let active_cab_calls = world.active_cab_calls(&elev_id);
+                let active_cab_calls = world.active_cab_calls(&elevator_id);
 
-                // Turn on newly active cab calls
+                // Turn on lights for newly active cab calls.
                 for call in active_cab_calls.difference(&previous_active_cab_calls) {
                     driver.call_button_light(call.floor, call.call_type, true);
                 }
 
-                // Turn off cleared cab calls
+                // Turn off lights for cab calls that are no longer active.
                 for call in previous_active_cab_calls.difference(&active_cab_calls) {
                     driver.call_button_light(call.floor, call.call_type, false);
                 }
+
+                // Track the current active hall calls so the next update
+                // can determine which lights changed.
                 previous_active_cab_calls = active_cab_calls.clone();
 
                 for call in active_cab_calls {
@@ -73,14 +74,17 @@ pub async fn call_manager(
                 }
 
                 let active_hall_calls = world.active_hall_calls();
+
                 // Turn on lights for newly active hall calls.
                 for call in active_hall_calls.difference(&previous_active_hall_calls) {
                     driver.call_button_light(call.floor, call.call_type, true);
                 }
+
                 // Turn off lights for hall calls that are no longer active.
                 for call in previous_active_hall_calls.difference(&active_hall_calls) {
                     driver.call_button_light(call.floor, call.call_type, false);
                 }
+
                 // Track the current active hall calls so the next update
                 // can determine which lights changed.
                 previous_active_hall_calls = active_hall_calls.clone();
@@ -88,7 +92,7 @@ pub async fn call_manager(
                 // Run the hall call assignment algorithm to determine which
                 // hall calls should be served by this elevator.
                 let assigned_calls =
-                    assigner::run_assigner(world.clone(), &active_hall_calls, elev_id);
+                    assigner::run_assigner(world.clone(), &active_hall_calls, elevator_id);
                 for call in assigned_calls {
                     all_active_calls.insert(call);
                 }

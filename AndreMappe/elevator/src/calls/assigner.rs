@@ -87,7 +87,7 @@ impl AssignerState {
     pub fn from_elevator(world: &WorldView, elevator: &ElevatorStatus) -> Self {
         let mut cab_requests = vec![false; ELEV_NUM_FLOORS as usize];
 
-        for call in world.active_cab_calls(&elevator.elev_id) {
+        for call in world.active_cab_calls(&elevator.elevator_id) {
             if call.floor < ELEV_NUM_FLOORS {
                 cab_requests[call.floor as usize] = true;
             }

@@ -1,3 +1,10 @@
+//! Messaging and shared data structures for the distributed elevator system.
+//!
+//! This module defines the core types used for communication between the
+//! different managers in the system (ElevatorManager, CallManager, and
+//! WorldManager). It also contains representations of elevator state,
+//! calls, and identifiers used for tracking requests across the network.
+
 use driver_rust::elevio::elev::{CAB, HALL_DOWN, HALL_UP};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -6,45 +13,55 @@ use std::fmt;
 use crate::network::world_view::WorldView;
 use crate::elevator::elevator::{LocalElevatorStatus, Direction, Behaviour};
 
-pub type ElevatorId = [u8; 6]; // MAC-sized identity
+/// Unique identifier for an elevator.
+/// 
+/// The ID is based on a MAC-sized array.
+pub type ElevatorId = [u8; 6];
 
 
+/// Represents the current state of an elevator.
+/// 
+/// This structure is distributed across the network so that all
+/// elevators maintain a shared world view of the system.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ElevatorStatus {
-    pub elev_id: ElevatorId,
+    pub elevator_id: ElevatorId,
     pub behaviour: Behaviour,
     pub floor: u8,
     pub direction: Direction,
+
+    /// Local set of cab calls
     pub cab_calls: HashSet<Call>,
+
+    /// Global set of hall calls.
     pub hall_calls: HashSet<Call>,
-    pub finished_hall_calls: HashSet<Call>,
+
+    /// Global set of served hall calls.
+    pub served_hall_calls: HashSet<Call>,
+
+    /// Global set of cab calls.
     pub known_cab_calls: HashSet<Call>,
+    
+    /// Indicates whether the elevator has faults.
     pub has_faults: bool,
 }
 
 impl ElevatorStatus {
-    pub fn new(id: ElevatorId, floor: u8) -> Self {
+    pub fn new(elevator_id: ElevatorId, floor: u8) -> Self {
         Self {
-            elev_id: id,
+            elevator_id,
             behaviour: Behaviour::Idle,
             floor,
             direction: Direction::Stop,
             cab_calls: HashSet::new(),
             hall_calls: HashSet::new(),
-            finished_hall_calls: HashSet::new(),
+            served_hall_calls: HashSet::new(),
             known_cab_calls: HashSet::new(),
             has_faults: false,
         }
     }
 }
 
-
-// #[derive(Serialize, Deserialize, Clone, Debug)]
-// pub struct ElevState {
-//     pub behaviour: Behaviour,
-//     pub floor: u8,
-//     pub direction: Direction,
-// }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CallId {

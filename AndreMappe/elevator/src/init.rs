@@ -173,7 +173,8 @@ pub fn init_elevator(slot: ElevatorId) -> std::io::Result<e::Elevator> {
 
 
 /// Determine the elevator's initial floor at startup.
-/// If the elevator is already aligned with a floor sensor, that floor is returned immediately. Otherwise, the elevator is driven downward until a floor sensor is reached, at which point the motor is stopped.
+/// If the elevator is already aligned with a floor sensor, that floor is returned immediately. 
+/// Otherwise, the elevator is driven downward until a floor sensor is reached, at which point the motor is stopped.
 pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
     if let Some(floor) = elev.floor_sensor() {
         return Some(floor);
@@ -219,12 +220,11 @@ pub fn spawn_tasks(
     } = channels;
 
     // Poll button presses and floor events from the elevator hardware.
-    input::spawn_input_thread(
+    input::input_manager(
         elev_id,
         elevator.clone(),
         tx_world_manager.clone(),
         tx_elevator_manager.clone(),
-        ELEV_POLL,
     );
 
     // Broadcast local state and receive network updates.

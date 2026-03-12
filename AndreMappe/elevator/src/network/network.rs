@@ -249,11 +249,11 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
     if let Ok(remote_elevator_state) =
         bincode::deserialize::<ElevatorStatus>(&buf[..len])
     {
-        if remote_elevator_state.elev_id == local_elevator_state.elev_id {
+        if remote_elevator_state.elevator_id == local_elevator_state.elevator_id {
             continue;
         }
 
-        let elev_id = remote_elevator_state.elev_id;
+        let elev_id = remote_elevator_state.elevator_id;
 
         if disconnected_elevators.remove(&elev_id).is_some() {
             println!("Known elevator reconnected: {:?}", elev_id);
