@@ -123,7 +123,7 @@ impl fmt::Display for Call {
 
         write!(
             f,
-            "[{}:{}] {} call to floor: {}",
+            "[{:?}:{}] {} call to floor: {}",
             last_id_byte,
             self.call_id.seq,
             call_type,

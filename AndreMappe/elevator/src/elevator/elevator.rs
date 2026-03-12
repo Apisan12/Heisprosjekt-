@@ -395,7 +395,7 @@ pub async fn elevator_manager(
                             elevator.stop();
                             elevator.serve_current_floor(&tx_world_manager).await;
                             elevator.open_door();
-                            door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                            door_timer.start(DOOR_TIMEOUT);
                         }
 
                         // Stops the elevator at the bottom or top floor, used as a defensive
@@ -422,11 +422,11 @@ pub async fn elevator_manager(
                             if elevator.should_serve_here() {
                                 elevator.serve_current_floor(&tx_world_manager).await;
                                 elevator.open_door();
-                                door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                                door_timer.start(DOOR_TIMEOUT);
                             } else {
                                 elevator.serve_next_action();
                                 if elevator.state == ElevatorState::Moving {
-                                    travel_timer.start(Duration::from_secs(TRAVEL_TIMEOUT));
+                                    travel_timer.start(TRAVEL_TIMEOUT);
                                 }
                             }
                             elevator.send_new_status(&tx_world_manager).await;
@@ -439,7 +439,7 @@ pub async fn elevator_manager(
                         println!("Is obstructed: {}", is_obstructed);
                         if is_obstructed && elevator.state == ElevatorState::DoorOpen {
                             elevator.open_door();
-                            door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                            door_timer.start(DOOR_TIMEOUT);
                         }
                         elevator.send_new_status(&tx_world_manager).await;
                     }
@@ -453,7 +453,7 @@ pub async fn elevator_manager(
 
                 if elevator.is_obstructed {
                     elevator.open_door();
-                    door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                    door_timer.start(DOOR_TIMEOUT);
                     continue;
                 }
                 // Update intended travel direction before deciding whether to serve or depart.
@@ -463,11 +463,11 @@ pub async fn elevator_manager(
                 if elevator.should_serve_here() {
                     elevator.serve_current_floor(&tx_world_manager).await;
                     elevator.open_door();
-                    door_timer.start(Duration::from_secs(DOOR_TIMEOUT));
+                    door_timer.start(DOOR_TIMEOUT);
                 } else {
                     elevator.serve_next_action();
                     if elevator.state == ElevatorState::Moving {
-                        travel_timer.start(Duration::from_secs(TRAVEL_TIMEOUT));
+                        travel_timer.start(TRAVEL_TIMEOUT);
                     }
                 }
                 elevator.send_new_status(&tx_world_manager).await;

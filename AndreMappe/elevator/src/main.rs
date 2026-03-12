@@ -10,7 +10,6 @@ mod init;
 mod messages;
 mod network;
 mod calls;
-mod tests;
 use calls::assigner;
 
 #[tokio::main]
@@ -22,8 +21,8 @@ async fn main() -> std::io::Result<()> {
 
     // These tasks handle the elevator logic and communication for the node.
     init::spawn_tasks(
-        boot.node_id,
-        boot.elevator,
+        boot.elevator_id,
+        boot.driver,
         boot.initial_status,
         boot.floor,
         boot.channels,

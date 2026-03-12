@@ -9,7 +9,7 @@
 //! - spawning the long-running async tasks that make up the system
 
 use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
-//use mac_address::get_mac_address;
+use mac_address::get_mac_address;
 use tokio::sync::{mpsc, watch};
 use tokio::time::{sleep, Duration};
 use crate::config::*;
@@ -59,32 +59,41 @@ impl Channels {
 }
 
 
-/// Return a node identifier derived from the machine's MAC address.
-// pub fn get_mac_node_id() -> NodeId {
-//     let mac = get_mac_address()
-//         .expect("failed to access network interfaces")
-//         .expect("no MAC address found");
+/// Return a elevator identifier derived from the machine's MAC address.
+pub fn elevator_id_from_mac_adress() -> ElevatorId {
+    let mac = get_mac_address()
+        .expect("failed to access network interfaces")
+        .expect("no MAC address found");
 
-//     mac.bytes()
-// }
+    mac.bytes()
+}
 
-/// Parse elevator id from CLI args. Only used for simulating several elevators at the same machine.
-/// Expects: cargo run -- <id> 
-pub fn parse_id() -> ElevatorId {
-    let n: u8 = std::env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+/// Returns a unique elevator identifier.
+/// 
+/// If the program is started with `cargo run <id>`, the provided `<id>`
+/// is used to construc the elevator identifier. This is primarily intended
+/// for running multiple simulated elevators on the same machine.
+/// 
+/// If no CLI argument is provided, the identifier is derived from
+/// the machine's MAC address.
+pub fn get_elevator_id() -> ElevatorId {
+    if let Some(arg) = std::env::args().nth(1) {
+        if let Ok(n) = arg.parse::<u8>() {
+            println!("Using CLI elevator id: {}", n);
+            return [0, 0, 0, 0, 0, n];
+        }
+    }
 
-    [0, 0, 0, 0, 0, n]
+    println!("Using MAC-based elevator id");
+    elevator_id_from_mac_adress()
 }
 
 
 /// Data produced during startup and needed to launch the runtime.
 #[derive(Debug)]
 pub struct BootContext {
-    pub node_id: ElevatorId,
-    pub elevator: e::Elevator,
+    pub elevator_id: ElevatorId,
+    pub driver: e::Elevator,
     pub floor: u8,
     pub initial_status: ElevatorStatus,
     pub channels: Channels,
@@ -111,31 +120,26 @@ pub async fn boot() -> std::io::Result<BootContext> {
         ));
     }
 
-    // Use CLI-derived id when running multiple simulated elevators locally.
-    let node_id = parse_id();
-
-    // Use MAC-derived id when running on separate physical machines.
-    // let node_id = get_mac_node_id();
-
-    println!("Node ID: {:?}", node_id);
+    let elevator_id = get_elevator_id();
+    println!("Elevator ID: {:?}", elevator_id);
 
     // Connect to elevator driver
-    let elevator = init_elevator(node_id)?;
+    let driver = init_driver(elevator_id)?;
 
     // Determine a valid initial floor reference.
-    let floor = initial_floor(&elevator)
+    let floor = initial_floor(&driver)
         .await
         .expect("failed to determine initial floor");
 
     println!("Initial floor: {}", floor);
 
     // Recover previously known cab calls from the distributed system.
-    let recovered_cab_calls = recover_startup_state(node_id).await;
+    let recovered_cab_calls = recover_startup_state(elevator_id).await;
 
     println!("Recovered cab calls: {}", CallList(&recovered_cab_calls));
 
     // Build initial local elevator state.
-    let mut initial_status = ElevatorStatus::new(node_id, floor);
+    let mut initial_status = ElevatorStatus::new(elevator_id, floor);
     initial_status.cab_calls = recovered_cab_calls.clone();
     initial_status.known_cab_calls = recovered_cab_calls;
 
@@ -143,8 +147,8 @@ pub async fn boot() -> std::io::Result<BootContext> {
     let channels = Channels::new(initial_status.clone());
 
     let boot_ctx = BootContext {
-    node_id,
-    elevator,
+    elevator_id,
+    driver,
     floor,
     initial_status,
     channels,
@@ -156,35 +160,46 @@ pub async fn boot() -> std::io::Result<BootContext> {
 }
 
 /// Initialize the elevator driver connection.
-/// The simulator/driver port is derived from the final byte of `slot`,
-/// allowing multiple local instances to run on different ports.
-/// Initialize elevator driver connection and return the Elevator handle.
-pub fn init_elevator(slot: ElevatorId) -> std::io::Result<e::Elevator> {
-    let port = BASE_ELEVATOR_PORT + slot[5] as u32;
+/// 
+/// When running multiple simulated elevators on the same machine,
+/// the driver port is offset using the final byte of `elevator_id`
+/// so that each instance connects to a different simulator port.
+/// 
+/// When running on separate machines (no CLI id provided),
+/// the default `BASE_ELEVATOR_PORT` is used.
+/// 
+/// Returns the initialized elevator driver.
+pub fn init_driver(elevator_id: ElevatorId) -> std::io::Result<e::Elevator> {
+    let port = if std::env::args().nth(1).is_some() {
+        BASE_DRIVER_PORT + elevator_id[5] as u32
+    } else {
+        BASE_DRIVER_PORT
+    };
+
     let addr = format!("localhost:{}", port);
 
     println!("Init_elevator port: {}", port);
 
-    let elevator = e::Elevator::init(&addr, ELEV_NUM_FLOORS)?;
-    println!("Elevator started:\n{:#?}", elevator);
+    let driver = e::Elevator::init(&addr, ELEVATOR_NUM_FLOORS)?;
+    println!("Elevator started:\n{:#?}", driver);
 
-    Ok(elevator)
+    Ok(driver)
 }
 
 
 /// Determine the elevator's initial floor at startup.
 /// If the elevator is already aligned with a floor sensor, that floor is returned immediately. 
 /// Otherwise, the elevator is driven downward until a floor sensor is reached, at which point the motor is stopped.
-pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
-    if let Some(floor) = elev.floor_sensor() {
+pub async fn initial_floor(driver: &e::Elevator) -> Option<u8> {
+    if let Some(floor) = driver.floor_sensor() {
         return Some(floor);
     }
 
-    elev.motor_direction(DIRN_DOWN);
+    driver.motor_direction(DIRN_DOWN);
 
     loop {
-        if let Some(floor) = elev.floor_sensor() {
-            elev.motor_direction(DIRN_STOP);
+        if let Some(floor) = driver.floor_sensor() {
+            driver.motor_direction(DIRN_STOP);
             return Some(floor);
         }
         sleep(Duration::from_millis(10)).await;
@@ -200,7 +215,7 @@ pub async fn initial_floor(elev: &e::Elevator) -> Option<u8> {
 /// - world-state management
 /// - elevator state machine / motion control
 pub fn spawn_tasks(
-    elev_id: ElevatorId,
+    elevator_id: ElevatorId,
     elevator: e::Elevator,
     initial_elev_status: ElevatorStatus,
     floor: u8,
@@ -221,7 +236,7 @@ pub fn spawn_tasks(
 
     // Poll button presses and floor events from the elevator hardware.
     input::input_manager(
-        elev_id,
+        elevator_id,
         elevator.clone(),
         tx_world_manager.clone(),
         tx_elevator_manager.clone(),
@@ -235,7 +250,7 @@ pub fn spawn_tasks(
 
     // Manage hall/cab calls and assign work to the elevator controller.
     tokio::spawn(call_manager::call_manager(
-        elev_id,
+        elevator_id,
         elevator.clone(),
         rx_call_manager,
         tx_elevator_manager.clone(),
@@ -243,7 +258,7 @@ pub fn spawn_tasks(
 
     // Maintain the node's view of the distributed elevator world state.
     tokio::spawn(world_view::world_manager(
-        elev_id,
+        elevator_id,
         initial_elev_status,
         rx_world_manager,
         tx_call_manager.clone(),

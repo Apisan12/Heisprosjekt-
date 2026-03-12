@@ -8,7 +8,7 @@
 //! - receiving remote elevator state updates
 //! - detecting disconnected and reconnected peers
 
-use crate::config::NETWORK_PORT;
+use crate::config::UDP_BROADCAST_PORT;
 use crate::messages::{Call, ElevatorStatus, MsgToWorldManager, ElevatorId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
@@ -126,7 +126,7 @@ pub async fn test_network_self_send() -> bool {
 /// Returns the recovered set of calls.
 pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
     // Create UDP socket (same way the network manager does)
-    let socket = create_socket(NETWORK_PORT);
+    let socket = create_socket(UDP_BROADCAST_PORT);
     // let socket = Arc::new(socket);
 
     let mut recovered = HashSet::new();
@@ -202,7 +202,7 @@ pub async fn network_manager(
     let mut known_elevators: HashMap<ElevatorId, (Instant, ElevatorStatus)> = HashMap::new();
     let mut disconnected_elevators: HashMap<ElevatorId, ElevatorStatus> = HashMap::new();
 
-    let socket = create_socket(NETWORK_PORT);
+    let socket = create_socket(UDP_BROADCAST_PORT);
 
     loop {
         tokio::select! {

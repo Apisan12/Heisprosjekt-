@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use driver_rust::elevio::elev::{self, CAB, HALL_DOWN, HALL_UP};
 
 use crate::{
-    config::{BOTTOM_FLOOR, ELEV_POLL, TOP_FLOOR},
+    config::{BOTTOM_FLOOR, ELEVATOR_NUM_FLOORS, ELEVTOR_POLL_TIME},
     messages::{Call, CallId, ElevatorId, MsgToElevatorManager, MsgToWorldManager},
 };
 
@@ -42,7 +42,7 @@ pub fn input_manager(
 
         loop {
             // --- Call buttons ---
-            for floor in BOTTOM_FLOOR..TOP_FLOOR {
+            for floor in BOTTOM_FLOOR..ELEVATOR_NUM_FLOORS {
                 for call in [HALL_UP, HALL_DOWN, CAB] {
                     let pressed = driver.call_button(floor, call);
 
@@ -94,7 +94,7 @@ pub fn input_manager(
                 prev_obstruction = obstruction;
             }
 
-            thread::sleep(ELEV_POLL);
+            thread::sleep(ELEVTOR_POLL_TIME);
         }
     });
 }

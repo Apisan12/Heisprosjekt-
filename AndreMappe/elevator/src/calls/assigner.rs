@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use crate::messages::{Call, ElevatorStatus, ElevatorId};
 use crate::network::world_view::WorldView;
-use crate::config::ELEV_NUM_FLOORS;
+use crate::config::ELEVATOR_NUM_FLOORS;
 use crate::elevator::elevator::{Behaviour, Direction};
 
 /// Input struct sent to the `hall_request_assigner` program
@@ -85,10 +85,10 @@ impl AssignerState {
     /// need to be known by other elevators to be active. Then converts
     /// the cab calls to the assigner format.
     pub fn from_elevator(world: &WorldView, elevator: &ElevatorStatus) -> Self {
-        let mut cab_requests = vec![false; ELEV_NUM_FLOORS as usize];
+        let mut cab_requests = vec![false; ELEVATOR_NUM_FLOORS as usize];
 
         for call in world.active_cab_calls(&elevator.elevator_id) {
-            if call.floor < ELEV_NUM_FLOORS {
+            if call.floor < ELEVATOR_NUM_FLOORS {
                 cab_requests[call.floor as usize] = true;
             }
         }
@@ -146,7 +146,7 @@ pub fn run_assigner(
 
 /// Converts hall calls into the matrix format expected by the assigner.
 fn calls_to_assigner_matrix(active_calls: &HashSet<Call>) -> Vec<[bool; 2]> {
-    let mut matrix = vec![[false; 2]; ELEV_NUM_FLOORS as usize];
+    let mut matrix = vec![[false; 2]; ELEVATOR_NUM_FLOORS as usize];
 
     for call in active_calls {
         if call.call_type < 2 {
