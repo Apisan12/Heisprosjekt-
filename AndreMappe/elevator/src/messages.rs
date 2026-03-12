@@ -2,8 +2,8 @@
 //!
 //! This module defines the core types used for communication between the
 //! different managers in the system (ElevatorManager, CallManager, and
-//! WorldManager). It also contains representations of elevator state,
-//! calls, and identifiers used for tracking requests across the network.
+//! WorldManager). It also contains representations of elevator status,
+//! calls, and identifiers used in the messages.
 
 use driver_rust::elevio::elev::{CAB, HALL_DOWN, HALL_UP};
 use serde::{Deserialize, Serialize};
@@ -11,15 +11,14 @@ use std::collections::HashSet;
 use std::fmt;
 
 use crate::network::world_view::WorldView;
-use crate::elevator::elevator::{LocalElevatorStatus, Direction, Behaviour};
+use crate::elevator::elevator::{Direction, Behaviour};
 
 /// Unique identifier for an elevator.
 /// 
 /// The ID is based on a MAC-sized array.
 pub type ElevatorId = [u8; 6];
 
-
-/// Represents the current state of an elevator.
+/// Represents the current status of an elevator.
 /// 
 /// This structure is distributed across the network so that all
 /// elevators maintain a shared world view of the system.
@@ -39,14 +38,16 @@ pub struct ElevatorStatus {
     /// Global set of served hall calls.
     pub served_hall_calls: HashSet<Call>,
 
-    /// Global set of cab calls.
+    /// Remote cab calls this elevator knows about.
     pub known_cab_calls: HashSet<Call>,
     
-    /// Indicates whether the elevator has faults.
+    /// Indicates whether the elevator currently has detected faults.
     pub has_faults: bool,
 }
 
 impl ElevatorStatus {
+
+    /// Creates a new instance of the ElevatorStatus struct
     pub fn new(elevator_id: ElevatorId, floor: u8) -> Self {
         Self {
             elevator_id,
@@ -62,23 +63,56 @@ impl ElevatorStatus {
     }
 }
 
+/// Status information about the local elevator.
+///
+/// This struct is sent to the `world_manager` whenever the
+/// local elevator status changes. 
+#[derive(Debug, Clone)]
+pub struct LocalElevatorStatus {
+    pub floor: u8,
+    pub direction: Direction,
+    pub behaviour: Behaviour,
+    /// Indicates whether the elevator currently has detected faults.
+    pub has_faults: bool,
+}
 
+impl LocalElevatorStatus {
+    /// Creates a new elevator status message.
+    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour, has_faults: bool) -> Self {
+        Self {
+            floor,
+            direction,
+            behaviour,
+            has_faults,
+        }
+    }
+}
+
+/// Identifier for a call.
+/// 
+/// Each call is uniquely identified by:
+/// - the elevator that generated the call
+/// - a monotonically increasing sequence number
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CallId {
-    pub elev_id: ElevatorId,
+    pub elevator_id: ElevatorId,
     pub seq: u64,
 }
 
+/// Representation of a call.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Call {
-    pub id: CallId,
+    pub call_id: CallId,
     pub floor: u8,
     pub call_type: u8,
 }
 
+/// Display function for printing a call.
+/// 
+/// Usefull for logging and debugging.
 impl fmt::Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let last_id_byte = self.id.elev_id[5];
+        let last_id_byte = self.call_id.elevator_id[5];
 
         let call_type = match self.call_type {
             CAB => "CAB",
@@ -91,13 +125,16 @@ impl fmt::Display for Call {
             f,
             "[{}:{}] {} call to floor: {}",
             last_id_byte,
-            self.id.seq,
+            self.call_id.seq,
             call_type,
             self.floor,
         )
     }
 }
 
+/// Helper wrapper used for printing a list of calls.
+/// 
+/// Useful for logging and debugging
 pub struct CallList<'a>(pub&'a HashSet<Call>);
 
 impl<'a> fmt::Display for CallList<'a> {
@@ -112,28 +149,42 @@ impl<'a> fmt::Display for CallList<'a> {
     }
 }
 
+/// Messages sent to the `elevator_manager`.
 #[derive(Debug)]
 pub enum MsgToElevatorManager {
-    /// Recievs a message when the elevator reaches a new floor.
+    /// Sent when the elevator arrives at a floor.
     AtFloor(u8),
-    /// Revieves a message with the active calls every time there is a change.
+    /// Sent whenever the set of active calls changes.
     ActiveCalls(HashSet<Call>),
-    /// Receives a message when the obstruction state changes.
+    /// Sent when the obstruction switch changes state.
     Obstruction(bool),
 }
 
+/// Messages sent to the `call_manager`.
 #[derive(Debug)]
 pub enum MsgToCallManager {
-    /// Recieves the WorldView everytime there is a change.
+    /// Sent whenever the `WorldView` changes.
     NewWorldView(WorldView),
 }
 
+/// Messages sent to the `world_manager`
 #[derive(Debug)]
 pub enum MsgToWorldManager {
+    /// Sent when a new call is detected from the hardware.
     AddCall(Call),
+
+    /// Sent when an elevator finishes serving a call.
     ServedCall(Call),
+
+    /// Sent whenever the local elevator status changes.
     NewLocalElevatorStatus(LocalElevatorStatus),
-    NewRemoteElevState(ElevatorStatus),
+
+    /// Sent when a status update from a remote elevator is received.
+    NewRemoteElevatorStatus(ElevatorStatus),
+
+    /// Sent when a remote elevator is detected as disconnected.
     AddDisconnectedElevator(ElevatorId),
+
+    /// Sent when a previously disconnected elevator reconnects.
     RemoveDisconnectedElevator(ElevatorId),
 }

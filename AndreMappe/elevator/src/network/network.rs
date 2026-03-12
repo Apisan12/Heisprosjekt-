@@ -140,7 +140,7 @@ pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
             Ok(Ok((len, _addr))) => {
                 if let Ok(status) = bincode::deserialize::<ElevatorStatus>(&buf[..len]) {
                     for call in &status.known_cab_calls {
-                        if call.id.elev_id == node_id {
+                        if call.call_id.elevator_id == node_id {
                             recovered.insert(call.clone());
                         }
                     }
@@ -269,7 +269,7 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
         known_elevators.insert(elev_id, (Instant::now(), remote_elevator_state.clone()));
 
         let _ = tx_world_view_msg
-                    .send(MsgToWorldManager::NewRemoteElevState(remote_elevator_state))
+                    .send(MsgToWorldManager::NewRemoteElevatorStatus(remote_elevator_state))
                     .await;
     }
     if let Ok(initializing_elevator) =

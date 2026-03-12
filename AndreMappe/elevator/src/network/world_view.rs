@@ -258,7 +258,7 @@ pub async fn world_manager(
 
                 let _ = tx_network.send(elev.clone());
             }
-            MsgToWorldManager::NewRemoteElevState(remote_elev) => {
+            MsgToWorldManager::NewRemoteElevatorStatus(remote_elev) => {
                 // Add the updated elevator state to the world
                 world.elevators.insert(remote_elev.elevator_id, remote_elev);
                 world.merge_hall_calls(&elev_id);

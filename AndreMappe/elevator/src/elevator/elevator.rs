@@ -20,7 +20,7 @@
 //! - `driver` – hardware interface for motor, doors, and sensors
 
 use crate::config::{BOTTOM_FLOOR, DOOR_TIMEOUT, TOP_FLOOR, TRAVEL_TIMEOUT};
-use crate::messages::{Call, MsgToElevatorManager, MsgToWorldManager};
+use crate::messages::{Call, MsgToElevatorManager, MsgToWorldManager, LocalElevatorStatus};
 use driver_rust::elevio::elev::{self, CAB, HALL_DOWN, HALL_UP};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -80,31 +80,6 @@ impl ElevatorState {
     }
 }
 
-/// Status information about the local elevator.
-///
-/// This struct is sent to the `world_manager` whenever the
-/// local elevator state changes. This is to make sure everything
-/// making decisions has an up-to-date view.
-#[derive(Debug, Clone)]
-pub struct LocalElevatorStatus {
-    pub floor: u8,
-    pub direction: Direction,
-    pub behaviour: Behaviour,
-    /// Indicates whether the obstruction sensor is active.
-    pub has_faults: bool,
-}
-
-impl LocalElevatorStatus {
-    /// Creates a new elevator status message.
-    pub fn new(floor: u8, direction: Direction, behaviour: Behaviour, has_faults: bool) -> Self {
-        Self {
-            floor,
-            direction,
-            behaviour,
-            has_faults,
-        }
-    }
-}
 
 /// Internal representation of the elevator.
 struct Elevator {

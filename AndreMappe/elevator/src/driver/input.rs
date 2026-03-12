@@ -50,13 +50,13 @@ pub fn input_manager(
 
                         // Converts the call into the Call struct before sending it to the world_manager.
                         let call_id = CallId {
-                            elev_id: elevator_id,
+                            elevator_id,
                             seq: seq,
                         };
 
                         seq = seq.wrapping_add(1);
                         let call = Call {
-                            id: call_id,
+                            call_id,
                             floor: floor,
                             call_type: call,
                         };
