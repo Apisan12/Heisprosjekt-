@@ -127,8 +127,9 @@ pub fn run_assigner(
         .output()
         .expect("failed to run hall_request_assigner");
 
+
     if !output.status.success() {
-        panic!("assigner failed");
+        return HashSet::new();
     }
 
     let stdout = String::from_utf8(output.stdout).unwrap();
