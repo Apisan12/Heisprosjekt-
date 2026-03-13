@@ -59,7 +59,7 @@ impl AssignerInput {
 /// 
 /// Each elevator ID maps to a hall call matrix indicating which calls
 /// that elevator should serve.
-type AssignerOutput = HashMap<String, Vec<[bool; 2]>>;
+type AssignerOutput = HashMap<String, Vec<[bool; 3]>>;
 
 /// Elevator state representation used by the assigner.
 /// 
@@ -123,6 +123,7 @@ pub fn run_assigner(
     let output = Command::new(assigner_path)
         .arg("--input")
         .arg(&json_input)
+        .arg("--includeCab")
         .output()
         .expect("failed to run hall_request_assigner");
 
@@ -162,7 +163,7 @@ fn calls_to_assigner_matrix(active_calls: &HashSet<Call>) -> Vec<[bool; 2]> {
 /// Converts an assigner matrix result back into a `HashSet<Call>`.
 fn assigned_matrix_to_calls(
     active_calls: &HashSet<Call>,
-    matrix: &Vec<[bool; 2]>,
+    matrix: &Vec<[bool; 3]>,
 ) -> HashSet<Call> {
 
     let mut calls = HashSet::new();

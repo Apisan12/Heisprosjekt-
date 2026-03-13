@@ -8,7 +8,7 @@
 //! - creating inter-task communication channels
 //! - spawning the long-running async tasks that make up the system
 
-use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP};
+use driver_rust::elevio::elev::{self as e, DIRN_DOWN, DIRN_STOP, HALL_DOWN, HALL_UP, CAB};
 use mac_address::get_mac_address;
 use tokio::sync::{mpsc, watch};
 use tokio::time::{sleep, Duration};
@@ -183,6 +183,14 @@ pub fn init_driver(elevator_id: ElevatorId) -> std::io::Result<e::Elevator> {
     let driver = e::Elevator::init(&addr, ELEVATOR_NUM_FLOORS)?;
     println!("Elevator started:\n{:#?}", driver);
 
+    // Turns off all call lights when initializing driver in case
+    // there has been a program different to ours on the elevator that left the lights on.
+    for floors in BOTTOM_FLOOR..=TOP_FLOOR {
+        for call_type in [CAB, HALL_DOWN, HALL_UP] {
+            driver.call_button_light(floors, call_type, false);
+        }
+    }
+
     Ok(driver)
 }
 
@@ -191,15 +199,18 @@ pub fn init_driver(elevator_id: ElevatorId) -> std::io::Result<e::Elevator> {
 /// If the elevator is already aligned with a floor sensor, that floor is returned immediately. 
 /// Otherwise, the elevator is driven downward until a floor sensor is reached, at which point the motor is stopped.
 pub async fn initial_floor(driver: &e::Elevator) -> Option<u8> {
+
     if let Some(floor) = driver.floor_sensor() {
+        driver.floor_indicator(floor);
         return Some(floor);
     }
-
+    
     driver.motor_direction(DIRN_DOWN);
 
     loop {
         if let Some(floor) = driver.floor_sensor() {
             driver.motor_direction(DIRN_STOP);
+            driver.floor_indicator(floor);
             return Some(floor);
         }
         sleep(Duration::from_millis(10)).await;
