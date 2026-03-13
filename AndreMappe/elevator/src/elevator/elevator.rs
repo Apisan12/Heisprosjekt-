@@ -251,7 +251,7 @@ impl Elevator {
 
     /// Returns the set of calls that will be served at the current floor.
     ///
-    /// Uses the same rules as [`should_serve_here`].
+    /// Uses the same rules as [`Self::should_serve_here`].
     fn served_calls(&self) -> HashSet<Call> {
         let service_direction = self.service_direction();
 
