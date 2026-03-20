@@ -16,10 +16,10 @@ use calls::assigner;
 async fn main() -> std::io::Result<()> {
 
     // Perform startup initialization, including hardware setup,
-    // network/node identification, and creation of shared channels/state.
+    // network/elevator identification, and creation of shared channels/state.
     let boot = init::boot().await?;
 
-    // These tasks handle the elevator logic and communication for the node.
+    // These tasks handle the elevator logic and communication for the elevator.
     init::spawn_tasks(
         boot.elevator_id,
         boot.driver,

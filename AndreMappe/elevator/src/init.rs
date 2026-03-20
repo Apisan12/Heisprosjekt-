@@ -1,7 +1,7 @@
-//! Startup and runtime initialization for a single elevator node.
+//! Startup and runtime initialization for a single elevator elevator.
 //!
 //! This module is responsible for:
-//! - identifying the local node
+//! - identifying the local elevator
 //! - connecting to the elevator driver
 //! - determining the initial floor
 //! - recovering persisted/distributed state at startup
@@ -100,7 +100,7 @@ pub struct BootContext {
 }
 
 
-/// Perform startup initialization for the local elevator node.
+/// Perform startup initialization for the local elevator elevator.
 ///
 /// Startup includes:
 /// - verifying that the network layer can send to itself
@@ -209,7 +209,7 @@ pub async fn initial_floor(driver: &e::Elevator) -> Option<u8> {
     }
 }
 
-/// Spawn all long-running tasks required by the elevator node.
+/// Spawn all long-running tasks required by the elevator elevator.
 ///
 /// The runtime is split into several concurrent subsystems:
 /// - input polling from the driver
@@ -259,7 +259,7 @@ pub fn spawn_tasks(
         tx_elevator_manager.clone(),
     ));
 
-    // Maintain the node's view of the distributed elevator world state.
+    // Maintain the elevator's view of the distributed elevator world state.
     tokio::spawn(world_view::world_manager(
         elevator_id,
         initial_elev_status,

@@ -3,7 +3,7 @@
 //! This module is responsible for:
 //! - creating UDP broadcast sockets
 //! - verifying basic local network functionality at startup
-//! - recovering cab-call state from other nodes during startup
+//! - recovering cab-call state from other elevators during startup
 //! - broadcasting local elevator state
 //! - receiving remote elevator state updates
 //! - detecting disconnected and reconnected peers
@@ -21,13 +21,13 @@ use tokio::time::Instant;
 use tokio::time::timeout;
 
 
-/// Recover known cab calls for the local node during startup.
+/// Recover known cab calls for the local elevator during startup.
 ///
 /// This function listens for a short time window on the shared network
 /// port and collects any cab calls from broadcast elevator states that
-/// belong to `node_id`.
+/// belong to `elevator_id`.
 /// Returns the recovered set of calls.
-pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
+pub async fn recover_startup_state(elevator_id: ElevatorId) -> HashSet<Call> {
     // Create UDP socket (same way the network manager does)
     let socket = create_socket(UDP_BROADCAST_PORT);
     // let socket = Arc::new(socket);
@@ -43,7 +43,7 @@ pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
             Ok(Ok((len, _addr))) => {
                 if let Ok(status) = bincode::deserialize::<ElevatorStatus>(&buf[..len]) {
                     for call in &status.known_cab_calls {
-                        if call.call_id.elevator_id == node_id {
+                        if call.call_id.elevator_id == elevator_id {
                             recovered.insert(call.clone());
                         }
                     }
@@ -84,7 +84,7 @@ pub fn create_socket(port: u16) -> Arc<UdpSocket> {
 }
 
 
-/// Run the network manager for a single elevator node.
+/// Run the network manager for a single elevator elevator.
 ///
 /// Responsibilities:
 /// - observe changes to local elevator state
