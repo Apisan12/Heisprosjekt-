@@ -35,6 +35,14 @@ cargo run 2
 ```
 in three separate terminals. This would with the default `BASE_DRIVER_PORT` connect to port `15657`, `15658` and `15659`.
 
+**Note for Linux users:**
+The program may need execute permissions for the 'hall_request_assigner' file.
+If you encounter a "Permission denied" error, run:
+
+```bash
+chmod +x hall_request_assigner
+```
+
 ## Documentation
 
 The documentation is written in the source code using Rust doc comments  (`///`). 
