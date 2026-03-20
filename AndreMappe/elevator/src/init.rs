@@ -19,7 +19,7 @@ use crate::network::world_view;
 use crate::calls::call_manager;
 use crate::elevator::elevator::elevator_manager;
 
-use crate::network::network::{network_manager, recover_startup_state, test_network_self_send,};
+use crate::network::network::{network_manager, recover_startup_state,};
 
 /// Collection of channels used for communication between the system's long-running tasks.
 /// Each manager/task receives messages through its dedicated receiver, while shared senders are cloned and distributed where needed.
@@ -111,14 +111,6 @@ pub struct BootContext {
 /// - constructing initial runtime state and channels
 pub async fn boot() -> std::io::Result<BootContext> {
     println!("Starting boot");
-
-    
-    if !test_network_self_send().await {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "network self-test failed",
-        ));
-    }
 
     let elevator_id = get_elevator_id();
     println!("Elevator ID: {:?}", elevator_id);

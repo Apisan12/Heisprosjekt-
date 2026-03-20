@@ -19,104 +19,7 @@ use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 use tokio::time::timeout;
-use std::net::{IpAddr, Ipv4Addr};
-use if_addrs::get_if_addrs;
 
-
-/// Return the first non-loopback IPv4 address found on the host.
-fn get_non_loopback_ipv4() -> Option<Ipv4Addr> {
-    let ifaces = get_if_addrs().ok()?;
-
-    for iface in ifaces {
-        if iface.is_loopback() {
-            continue;
-        }
-
-        match iface.ip() {
-            IpAddr::V4(ip) => {
-                let o = ip.octets();
-
-                // Skip link-local/APIPA addresses if you want stricter behavior
-                if o[0] == 169 && o[1] == 254 {
-                    continue;
-                }
-
-                return Some(ip);
-            }
-            IpAddr::V6(_) => {}
-        }
-    }
-
-    None
-}
-
-/// Perform a local UDP self-test.
-/// Returns `true` on success and `false` if any step fails.
-pub async fn test_network_self_send() -> bool {
-    let local_ip = match get_non_loopback_ipv4() {
-        Some(ip) => ip,
-        None => {
-            eprintln!("No non-loopback IPv4 interface found");
-            return false;
-        }
-    };
-
-    let bind_addr = SocketAddr::new(IpAddr::V4(local_ip), 0);
-
-    let socket = match UdpSocket::bind(bind_addr).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Failed to bind UDP self-test socket: {}", e);
-            return false;
-        }
-    };
-
-    let local_addr = match socket.local_addr() {
-        Ok(addr) => addr,
-        Err(e) => {
-            eprintln!("Failed to get local addr for UDP self-test: {}", e);
-            return false;
-        }
-    };
-
-    let payload = b"network-self-test";
-    let mut buf = [0u8; 128];
-
-    if let Err(e) = socket.send_to(payload, local_addr).await {
-        eprintln!("Failed to send UDP self-test packet: {}", e);
-        return false;
-    }
-
-    let recv_result = timeout(Duration::from_millis(300), socket.recv_from(&mut buf)).await;
-
-    let (len, src) = match recv_result {
-        Ok(Ok(v)) => v,
-        Ok(Err(e)) => {
-            eprintln!("Failed to receive UDP self-test packet: {}", e);
-            return false;
-        }
-        Err(_) => {
-            eprintln!("UDP self-test timed out");
-            return false;
-        }
-    };
-
-    if src.ip() != local_addr.ip() {
-        eprintln!(
-            "UDP self-test got packet from unexpected source: {}, expected IP {}",
-            src,
-            local_addr.ip()
-        );
-        return false;
-    }
-
-    if &buf[..len] != payload {
-        eprintln!("UDP self-test payload mismatch");
-        return false;
-    }
-
-    true
-}
 
 /// Recover known cab calls for the local node during startup.
 ///
@@ -133,7 +36,7 @@ pub async fn recover_startup_state(node_id: ElevatorId) -> HashSet<Call> {
     let mut buf = [0u8; 4096];
 
     // Listen window for recovery
-    let deadline = Instant::now() + Duration::from_millis(1500);
+    let deadline = Instant::now() + DISCONNECT_TIMEOUT;
 
     while Instant::now() < deadline {
         match timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await {
@@ -241,7 +144,7 @@ _ = tick.tick() => {
 
     let bytes = bincode::serialize(&local_elevator_state).unwrap();
     let _ = socket
-                .send_to(&bytes, "255.255.255.255:30000")
+                .send_to(&bytes, format!("255.255.255.255:{UDP_BROADCAST_PORT}"))
                 .await;
 }
 
@@ -279,7 +182,7 @@ Ok((len, _)) = socket.recv_from(&mut buf) => {
             let recovered_cab_calls = elevator.cab_calls.clone();
             let bytes = bincode::serialize(&recovered_cab_calls).unwrap();
             let _ = socket
-                    .send_to(&bytes, "255.255.255.255:30000");
+                    .send_to(&bytes, format!("255.255.255.255:{UDP_BROADCAST_PORT}"));
 
         }
 
