@@ -16,3 +16,5 @@ pub const UDP_BROADCAST_PORT: u16 = 30000;
 // Timers
 pub const DOOR_TIMEOUT: Duration = Duration::from_secs(3);
 pub const TRAVEL_TIMEOUT: Duration = Duration::from_secs(6);
+pub const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+

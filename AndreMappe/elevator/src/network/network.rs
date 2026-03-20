@@ -8,7 +8,7 @@
 //! - receiving remote elevator state updates
 //! - detecting disconnected and reconnected peers
 
-use crate::config::UDP_BROADCAST_PORT;
+use crate::config::{DISCONNECT_TIMEOUT, UDP_BROADCAST_PORT};
 use crate::messages::{Call, ElevatorStatus, MsgToWorldManager, ElevatorId};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::{HashMap, HashSet};
@@ -221,7 +221,7 @@ _ = tick.tick() => {
     let mut disconnected = Vec::new();
 
     known_elevators.retain(|elev_id, (last_seen, status)| {
-        if now.duration_since(*last_seen) >= Duration::from_secs(3) {
+        if now.duration_since(*last_seen) >= DISCONNECT_TIMEOUT {
             println!("Elevator disconnected: {:?}", elev_id);
 
             disconnected_elevators.insert(*elev_id,status.clone());
